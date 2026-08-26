@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Flying Carpet: One Night, Five Debts</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #0a0e27;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #game {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #d4af37;
+            font-size: 14px;
+            z-index: 100;
+            font-family: monospace;
+        }
+        #chapter {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+        #objective {
+            font-size: 11px;
+            margin-top: 10px;
+            color: #a08968;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="chapter">Chapter 1: The Gift</div>
+        <div id="objective">Find the palace...</div>
+    </div>
+    <script src="js/game.js"></script>
+</body>
+</html>
