@@ -1,52 +1,837 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Flying Carpet: One Night, Five Debts</title>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background: #0a0e27;
-            font-family: Arial, sans-serif;
-            overflow: hidden;
-        }
-        #game {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        #ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: #d4af37;
-            font-size: 14px;
-            z-index: 100;
-            font-family: monospace;
-        }
-        #chapter {
-            font-size: 12px;
-            opacity: 0.8;
-        }
-        #objective {
-            font-size: 11px;
-            margin-top: 10px;
-            color: #a08968;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>The Flying Carpet</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#1B1330; touch-action:none; }
+  #game-container { width:100%; height:100%; display:flex; align-items:center; justify-content:center; touch-action:none; }
+  #game-container canvas { max-width:100%; max-height:100%; }
+
+  /* Dialogue box: an arch-topped panel, echoing an iwan doorway. This is the one
+     recurring signature shape in the UI — everything else stays plain. */
+  #dialogue-box {
+    position:fixed; left:50%; bottom:4%;
+    transform:translateX(-50%);
+    width:min(640px, 92vw);
+    background:linear-gradient(180deg,#2a2044 0%,#1B1330 100%);
+    border:2px solid #E8A33D;
+    border-radius:18px 18px 6px 6px;
+    padding:22px 26px 18px;
+    color:#EFE3C8;
+    font-family:Georgia,'Times New Roman',serif;
+    box-shadow:0 8px 30px rgba(0,0,0,0.55);
+    cursor:pointer;
+    z-index:20;
+    touch-action:none;
+    transition:opacity 0.2s ease, transform 0.2s ease;
+  }
+  #dialogue-box::before {
+    content:"";
+    position:absolute; top:-20px; left:50%;
+    transform:translateX(-50%);
+    width:52px; height:20px;
+    background:#2a2044;
+    border:2px solid #E8A33D;
+    border-bottom:none;
+    border-radius:26px 26px 0 0;
+  }
+  #dialogue-box.hidden { opacity:0; pointer-events:none; transform:translateX(-50%) translateY(10px); }
+  #dialogue-speaker {
+    font-family:'Trebuchet MS','Segoe UI',sans-serif;
+    font-size:12px; letter-spacing:2px; text-transform:uppercase;
+    color:#4EC9C0; margin-bottom:6px;
+  }
+  #dialogue-text { font-size:19px; line-height:1.45; }
+  #dialogue-next {
+    position:absolute; right:18px; bottom:10px;
+    font-size:11px; color:#E8A33D; opacity:0.85;
+    animation:bob 1.2s ease-in-out infinite;
+  }
+  @keyframes bob { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(4px); } }
+
+  #touch-controls {
+    position:fixed; bottom:6%; left:0; right:0;
+    display:flex; justify-content:space-between; padding:0 6%;
+    z-index:15; pointer-events:none;
+  }
+  #touch-controls.hidden { display:none; }
+  .touch-btn {
+    pointer-events:auto; touch-action:none;
+    width:62px; height:62px;
+    background:rgba(239,227,200,0.14);
+    border:2px solid rgba(239,227,200,0.55);
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:22px; color:#EFE3C8;
+    user-select:none; -webkit-user-select:none;
+  }
+  .touch-btn:active { background:rgba(239,227,200,0.32); }
+
+  #hint-banner {
+    position:fixed; top:6%; left:50%; transform:translateX(-50%);
+    max-width:86vw;
+    font-family:Georgia,serif; font-style:italic;
+    color:#EFE3C8; font-size:14px; text-align:center;
+    background:rgba(27,19,48,0.72);
+    padding:8px 18px; border-radius:20px;
+    z-index:20; opacity:1; transition:opacity 0.4s ease;
+  }
+  #hint-banner.hidden { opacity:0; }
+
+  @media (max-width:700px) {
+    #dialogue-text { font-size:16px; }
+    .touch-btn { width:54px; height:54px; }
+  }
+</style>
 </head>
 <body>
-    <div id="ui">
-        <div id="chapter">Chapter 1: The Gift</div>
-        <div id="objective">Find the palace...</div>
-    </div>
-    <script src="js/game.js"></script>
+
+<div id="game-container"></div>
+
+<div id="dialogue-box" class="hidden">
+  <div id="dialogue-speaker"></div>
+  <div id="dialogue-text"></div>
+  <div id="dialogue-next">tap ▼</div>
+</div>
+
+<div id="touch-controls" class="hidden">
+  <div id="btn-left" class="touch-btn">◀</div>
+  <div id="btn-right" class="touch-btn">▶</div>
+</div>
+
+<div id="hint-banner" class="hidden"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.90.0/phaser.min.js"></script>
+<script>
+/* =========================================================================
+   THE FLYING CARPET — vertical slice
+   Chapters covered: Village -> Palace -> Carpet Flight -> Oven Couple
+   ========================================================================= */
+
+/* ---------- palette (Timurid-inspired: sunset gold, Samarkand turquoise) --------- */
+const COLORS = {
+  ink: 0x1B1330,
+  dusk: 0x4A2F6B,
+  saffron: 0xE8A33D,
+  turquoise: 0x2F9B96,
+  turquoiseDark: 0x1F6B66,
+  terracotta: 0xC17A4F,
+  terracottaDark: 0x8A5A3C,
+  parchment: 0xEFE3C8,
+  silhouette: 0x241A2E
+};
+
+/* ---------- save state -----------------------------------------------------------
+   In-memory only for now: this file previews as an artifact inside Claude.ai, and
+   that sandbox blocks localStorage entirely. Once this is sitting on your own
+   GitHub Pages URL (a normal, unsandboxed page), swap persist()/restore() below
+   for real localStorage calls and progress will survive a refresh. Nothing else
+   in the file needs to change. */
+const GameState = {
+  flags: {},
+  set(key, val) { this.flags[key] = val; this.persist(); },
+  get(key) { return this.flags[key]; },
+  persist() { window.__flyingCarpetSave = JSON.stringify(this.flags); },
+  restore() {
+    if (window.__flyingCarpetSave) {
+      try { this.flags = JSON.parse(window.__flyingCarpetSave); } catch (e) { /* ignore */ }
+    }
+  }
+};
+
+/* ---------- dialogue box (HTML overlay, not drawn on canvas) --------------------- */
+const Dialogue = {
+  el:null, speakerEl:null, textEl:null,
+  queue:[], active:false, onDone:null,
+  init() {
+    this.el = document.getElementById('dialogue-box');
+    this.speakerEl = document.getElementById('dialogue-speaker');
+    this.textEl = document.getElementById('dialogue-text');
+    this.el.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.advance(); });
+  },
+  show(lines, onDone) {
+    this.queue = lines.slice();
+    this.onDone = onDone || null;
+    this.active = true;
+    this.el.classList.remove('hidden');
+    this._next();
+  },
+  _next() {
+    if (this.queue.length === 0) { this._close(); return; }
+    const line = this.queue.shift();
+    if (line.speaker) { this.speakerEl.textContent = line.speaker; this.speakerEl.style.display = 'block'; }
+    else { this.speakerEl.style.display = 'none'; }
+    this.textEl.textContent = line.text;
+  },
+  advance() { if (this.active) this._next(); },
+  _close() {
+    this.active = false;
+    this.el.classList.add('hidden');
+    const cb = this.onDone; this.onDone = null;
+    if (cb) cb();
+  }
+};
+
+/* ---------- touch controls (left/right only; carpet scene uses tap-anywhere) ----- */
+const Touch = {
+  left:false, right:false, el:null,
+  init() {
+    this.el = document.getElementById('touch-controls');
+    const bind = (id, prop) => {
+      const btn = document.getElementById(id);
+      btn.addEventListener('pointerdown', (e) => { e.preventDefault(); this[prop] = true; });
+      btn.addEventListener('pointerup', () => { this[prop] = false; });
+      btn.addEventListener('pointerleave', () => { this[prop] = false; });
+      btn.addEventListener('pointercancel', () => { this[prop] = false; });
+    };
+    bind('btn-left','left');
+    bind('btn-right','right');
+  },
+  show() { this.el.classList.remove('hidden'); },
+  hide() { this.el.classList.add('hidden'); this.left = false; this.right = false; }
+};
+
+function showHint(text, duration) {
+  const el = document.getElementById('hint-banner');
+  el.textContent = text;
+  el.classList.remove('hidden');
+  clearTimeout(showHint._t);
+  showHint._t = setTimeout(() => el.classList.add('hidden'), duration || 3200);
+}
+
+/* ---------- procedural art helpers (no image files -- everything is drawn) ------- */
+function ensureTexture(scene, key, w, h, drawFn) {
+  if (scene.textures.exists(key)) return key;
+  const g = scene.add.graphics();
+  drawFn(g);
+  g.generateTexture(key, w, h);
+  g.destroy();
+  return key;
+}
+
+function makePersonTexture(scene, key, bodyColor, headColor) {
+  return ensureTexture(scene, key, 28, 44, (g) => {
+    g.fillStyle(headColor, 1);
+    g.fillCircle(14, 10, 9);
+    g.fillStyle(bodyColor, 1);
+    g.fillRoundedRect(4, 16, 20, 26, 6);
+  });
+}
+
+function makeDomeTexture(scene, key, color, ribColor) {
+  const w = 70, h = 90;
+  return ensureTexture(scene, key, w, h, (g) => {
+    g.fillStyle(COLORS.terracottaDark, 1);
+    g.fillRect(w*0.30, h*0.55, w*0.40, h*0.45);
+    g.fillStyle(color, 1);
+    g.fillEllipse(w/2, h*0.42, w*0.82, h*0.62);
+    g.fillTriangle(w/2, 0, w*0.42, h*0.28, w*0.58, h*0.28);
+    g.lineStyle(2, ribColor, 0.6);
+    g.beginPath();
+    g.moveTo(w*0.20, h*0.44); g.lineTo(w*0.50, h*0.16); g.lineTo(w*0.80, h*0.44);
+    g.strokePath();
+  });
+}
+
+function makeMinaretTexture(scene, key) {
+  const w = 34, h = 200;
+  return ensureTexture(scene, key, w, h, (g) => {
+    g.fillStyle(COLORS.terracotta, 1);
+    g.fillRect(w*0.25, h*0.18, w*0.50, h*0.82);
+    g.fillStyle(COLORS.saffron, 1);
+    g.fillRect(w*0.18, h*0.32, w*0.64, 5);
+    g.fillStyle(COLORS.turquoise, 1);
+    g.fillEllipse(w/2, h*0.14, w*0.66, h*0.20);
+    g.fillTriangle(w/2, 0, w*0.38, h*0.10, w*0.62, h*0.10);
+  });
+}
+
+function makeCarpetTexture(scene, key) {
+  const w = 60, h = 18;
+  return ensureTexture(scene, key, w, h, (g) => {
+    g.fillStyle(COLORS.terracotta, 1);
+    g.fillRoundedRect(0, 2, w, h-4, 4);
+    g.fillStyle(COLORS.saffron, 1);
+    g.fillRect(4, 2, w-8, 3);
+    g.fillRect(4, h-5, w-8, 3);
+    g.fillStyle(COLORS.turquoise, 1);
+    for (let i=0;i<4;i++) g.fillRect(6+i*12, 7, 4, 4);
+    g.fillStyle(COLORS.saffron, 1);
+    g.fillRect(0, 4, 3, h-8);
+    g.fillRect(w-3, 4, 3, h-8);
+  });
+}
+
+function fillSky(scene, width, top, bottom) {
+  const g = scene.add.graphics();
+  g.fillGradientStyle(top, top, bottom, bottom, 1);
+  g.fillRect(0, 0, width, 450);
+  return g;
+}
+
+/* =========================================================================
+   TITLE SCENE
+   ========================================================================= */
+class TitleScene extends Phaser.Scene {
+  constructor() { super('TitleScene'); }
+  create() {
+    fillSky(this, 800, COLORS.ink, COLORS.dusk);
+
+    makeDomeTexture(this, 'dome-title', COLORS.turquoise, COLORS.turquoiseDark);
+    this.add.image(130, 380, 'dome-title').setScale(1.5).setTint(0x0b0714).setAlpha(0.5);
+    this.add.image(670, 390, 'dome-title').setScale(1.15).setTint(0x0b0714).setAlpha(0.5);
+
+    this.add.text(400, 155, 'THE FLYING CARPET', {
+      fontFamily:'Georgia, serif', fontSize:'38px', color:'#E8A33D', fontStyle:'bold'
+    }).setOrigin(0.5);
+    this.add.text(400, 198, 'One Night, Five Debts', {
+      fontFamily:'Georgia, serif', fontSize:'17px', color:'#EFE3C8', fontStyle:'italic'
+    }).setOrigin(0.5);
+    this.add.text(400, 400, 'Preview build \u2014 Chapters 1-3', {
+      fontFamily:'Trebuchet MS, sans-serif', fontSize:'12px', color:'#8A7A9A'
+    }).setOrigin(0.5);
+
+    const prompt = this.add.text(400, 330, 'Tap, click, or press Space to begin', {
+      fontFamily:'Trebuchet MS, sans-serif', fontSize:'16px', color:'#EFE3C8'
+    }).setOrigin(0.5);
+    this.tweens.add({ targets:prompt, alpha:0.25, duration:800, yoyo:true, repeat:-1 });
+
+    this.input.once('pointerdown', () => this.begin());
+    this.input.keyboard.once('keydown-SPACE', () => this.begin());
+  }
+  begin() {
+    Dialogue.init();
+    Touch.init();
+    this.scene.start('IntroScene');
+  }
+}
+
+/* =========================================================================
+   INTRO SCENE — the flash-forward hook (hall of skulls, the empty hook)
+   ========================================================================= */
+class IntroScene extends Phaser.Scene {
+  constructor() { super('IntroScene'); }
+  create() {
+    const bg = this.add.graphics();
+    bg.fillStyle(COLORS.ink, 1);
+    bg.fillRect(0, 0, 800, 450);
+    bg.fillStyle(COLORS.terracottaDark, 0.3);
+    bg.fillEllipse(400, 430, 700, 60);
+
+    const hookY = 150, count = 7, emptyIndex = 3;
+    for (let i=0;i<count;i++) {
+      const x = 130 + i*90;
+      const hookG = this.add.graphics();
+      hookG.lineStyle(3, 0x5a4a6a, 1);
+      hookG.beginPath();
+      hookG.arc(x, hookY, 10, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false);
+      hookG.strokePath();
+
+      if (i === emptyIndex) {
+        const hl = this.add.graphics();
+        hl.fillStyle(COLORS.saffron, 0.18);
+        hl.fillCircle(x, hookY+34, 20);
+      } else {
+        const s = this.add.graphics();
+        s.fillStyle(0xC9BFAA, 0.85);
+        s.fillCircle(x, hookY+34, 15);
+        s.fillTriangle(x-5, hookY+40, x+5, hookY+40, x, hookY+50);
+        s.fillStyle(COLORS.ink, 1);
+        s.fillCircle(x-5, hookY+30, 3);
+        s.fillCircle(x+5, hookY+30, 3);
+      }
+    }
+
+    makePersonTexture(this, 'sanobar-tex', COLORS.silhouette, COLORS.silhouette);
+    this.add.image(400, 345, 'sanobar-tex').setScale(3.4).setTint(0x0b0714);
+
+    this.time.delayedCall(500, () => {
+      Dialogue.show([
+        { speaker:'King Sanobar', text:"You have come to ask about the woman in the iron cage." },
+        { speaker:'King Sanobar', text:"Every man who has asked me that question is in this hall. Look at the walls." },
+        { speaker:'King Sanobar', text:"There is one hook left empty. Ask anyway, if you still want to." }
+      ], () => this.toTitleCard());
+    });
+  }
+  toTitleCard() {
+    this.cameras.main.fadeOut(600, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('MonthsEarlierScene'));
+  }
+}
+
+/* =========================================================================
+   TITLE CARD — "Months earlier..."
+   ========================================================================= */
+class MonthsEarlierScene extends Phaser.Scene {
+  constructor() { super('MonthsEarlierScene'); }
+  create() {
+    this.cameras.main.setBackgroundColor(COLORS.ink);
+    const txt = this.add.text(400, 225, 'Months earlier...', {
+      fontFamily:'Georgia, serif', fontSize:'30px', fontStyle:'italic', color:'#EFE3C8'
+    }).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({
+      targets:txt, alpha:1, duration:900, yoyo:true, hold:900,
+      onComplete: () => this.scene.start('VillageScene')
+    });
+  }
+}
+
+/* =========================================================================
+   VILLAGE SCENE — simple walk; meet the old traveler; reach the palace
+   ========================================================================= */
+class VillageScene extends Phaser.Scene {
+  constructor() { super('VillageScene'); }
+  create() {
+    this.worldWidth = 1500;
+    this.leaving = false;
+    this.physics.world.setBounds(0, 0, this.worldWidth, 450);
+    this.cameras.main.setBounds(0, 0, this.worldWidth, 450);
+
+    this.buildBackground();
+
+    makePersonTexture(this, 'player-tex', COLORS.terracotta, 0xE0B88A);
+    this.player = this.physics.add.sprite(80, 340, 'player-tex').setScale(1.4);
+    this.player.setCollideWorldBounds(true);
+    this.player.body.setSize(20, 26).setOffset(4, 16);
+    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+
+    makePersonTexture(this, 'oldman-tex', 0x5a4a6a, 0xC9BFAA);
+    this.oldMan = this.physics.add.staticSprite(770, 340, 'oldman-tex').setScale(1.4);
+    this.oldManMet = false;
+
+    this.gateZone = this.add.zone(this.worldWidth-50, 340, 40, 140);
+    this.physics.add.existing(this.gateZone, true);
+
+    this.physics.add.overlap(this.player, this.oldMan, () => this.meetOldMan());
+    this.physics.add.overlap(this.player, this.gateZone, () => this.reachPalace());
+
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.keyA = this.input.keyboard.addKey('A');
+    this.keyD = this.input.keyboard.addKey('D');
+
+    Touch.show();
+    this.time.delayedCall(200, () => showHint("A childless couple were given a son, late in life. He grew sharp beyond his years."));
+  }
+  update() {
+    if (Dialogue.active || this.leaving) { this.player.setVelocityX(0); return; }
+    const left = this.cursors.left.isDown || this.keyA.isDown || Touch.left;
+    const right = this.cursors.right.isDown || this.keyD.isDown || Touch.right;
+    const speed = 190;
+    if (left) { this.player.setVelocityX(-speed); this.player.setFlipX(true); }
+    else if (right) { this.player.setVelocityX(speed); this.player.setFlipX(false); }
+    else { this.player.setVelocityX(0); }
+  }
+  meetOldMan() {
+    if (this.oldManMet || Dialogue.active) return;
+    this.oldManMet = true;
+    Dialogue.show([
+      { speaker:'Old Traveler', text:"You have a good mind, boy. Take this." },
+      { speaker:'Old Traveler', text:"Sit on it and speak, and it will carry you anywhere in an eyeblink. Fold it and speak differently, and it hides itself in your pocket." },
+      { speaker:'Old Traveler', text:"One more thing \u2014 when it comes time to marry, ask for the King's daughter. No one else. Whatever they offer you instead, refuse it." }
+    ], () => showHint("Reach the palace at the edge of town."));
+  }
+  reachPalace() {
+    if (Dialogue.active || this.leaving) return;
+    this.leaving = true;
+    Touch.hide();
+    this.cameras.main.fadeOut(400, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('PalaceScene'));
+  }
+  buildBackground() {
+    const g = this.add.graphics();
+    g.fillGradientStyle(COLORS.saffron, COLORS.saffron, COLORS.dusk, COLORS.dusk, 1);
+    g.fillRect(0, 0, this.worldWidth, 450);
+    g.setScrollFactor(0.3);
+
+    const ground = this.add.graphics();
+    ground.fillStyle(COLORS.terracotta, 1);
+    ground.fillRect(0, 380, this.worldWidth, 70);
+
+    for (let i=0;i<6;i++) {
+      const hut = this.add.graphics();
+      const x = 220 + i*230;
+      hut.fillStyle(COLORS.terracottaDark, 1);
+      hut.fillRect(x, 322, 85, 65);
+      hut.fillTriangle(x-8, 322, x+93, 322, x+42.5, 288);
+      hut.setScrollFactor(0.75);
+    }
+
+    const gate = this.add.graphics();
+    gate.fillStyle(COLORS.silhouette, 0.8);
+    gate.fillRect(this.worldWidth-70, 200, 20, 180);
+    gate.fillRect(this.worldWidth-25, 200, 20, 180);
+    gate.fillEllipse(this.worldWidth-47, 200, 70, 40);
+  }
+}
+
+/* =========================================================================
+   PALACE SCENE — petition, the king's fury, the minister's bargain
+   ========================================================================= */
+class PalaceScene extends Phaser.Scene {
+  constructor() { super('PalaceScene'); }
+  create() {
+    Touch.hide();
+    this.buildBackground();
+    this.time.delayedCall(400, () => this.beginScene());
+  }
+  buildBackground() {
+    const g = this.add.graphics();
+    g.fillGradientStyle(COLORS.dusk, COLORS.dusk, COLORS.ink, COLORS.ink, 1);
+    g.fillRect(0, 0, 800, 450);
+
+    const floor = this.add.graphics();
+    floor.fillStyle(COLORS.terracottaDark, 1);
+    floor.fillRect(0, 380, 800, 70);
+
+    const arch = this.add.graphics();
+    arch.fillStyle(COLORS.terracotta, 1);
+    arch.fillRect(280, 120, 240, 270);
+    arch.fillStyle(COLORS.saffron, 1);
+    arch.fillEllipse(400, 150, 220, 90);
+    arch.fillStyle(COLORS.dusk, 1);
+    arch.fillEllipse(400, 165, 178, 78);
+
+    makeDomeTexture(this, 'dome-palace', COLORS.turquoise, COLORS.turquoiseDark);
+    this.add.image(150, 90, 'dome-palace').setScale(1.6);
+    this.add.image(650, 90, 'dome-palace').setScale(1.6);
+    makeMinaretTexture(this, 'minaret-palace');
+    this.add.image(80, 250, 'minaret-palace').setScale(1.1);
+    this.add.image(720, 250, 'minaret-palace').setScale(1.1);
+
+    makePersonTexture(this, 'guard-tex', 0x3a2f52, 0xC9BFAA);
+    this.add.image(320, 350, 'guard-tex').setScale(1.6);
+    this.add.image(480, 350, 'guard-tex').setScale(1.6);
+
+    makePersonTexture(this, 'king-tex', COLORS.saffron, 0xC9BFAA);
+    this.king = this.add.image(400, 320, 'king-tex').setScale(2.0);
+
+    makePersonTexture(this, 'minister-tex', COLORS.turquoise, 0xC9BFAA);
+    this.minister = this.add.image(600, 350, 'minister-tex').setScale(1.5).setAlpha(0);
+
+    makePersonTexture(this, 'player-tex2', COLORS.terracotta, 0xE0B88A);
+    this.add.image(400, 400, 'player-tex2').setScale(1.5);
+  }
+  beginScene() {
+    Dialogue.show([
+      { speaker:'Guard', text:"State your business, or turn back." },
+      { speaker:'You', text:"I have come to ask the King for his daughter's hand." },
+      { speaker:'Guard', text:"...You will tell him that yourself. Inside." }
+    ], () => this.kingScene());
+  }
+  kingScene() {
+    Dialogue.show([
+      { speaker:'The King', text:"A commoner. Asking for MY daughter." },
+      { speaker:'The King', text:"Take him out and cut off his head." }
+    ], () => this.ministerIntervenes());
+  }
+  ministerIntervenes() {
+    this.tweens.add({ targets:this.minister, alpha:1, duration:400 });
+    Dialogue.show([
+      { speaker:'Minister', text:"Wait, Majesty. A moment first." },
+      { speaker:'Minister', text:"For ten years I have had nothing but riddles out of King Sanobar's country. A saddler who breaks what he builds. A baker who feeds a river. A gravekeeper who will not stop weeping. A couple living inside a kiln." },
+      { speaker:'Minister', text:"I have never had a way to ask. This one claims he can travel anywhere in an eyeblink." },
+      { speaker:'Minister', text:"Go and make sense of the couple in the kiln \u2014 and whatever that unravels into. Come back with the truth, and she is yours." },
+      { speaker:'The King', text:"...Fine. Just get him out of my sight, one way or another." }
+    ], () => this.carpetGiven());
+  }
+  carpetGiven() {
+    makeCarpetTexture(this, 'carpet-small');
+    const carpet = this.add.image(400, 410, 'carpet-small').setScale(2).setAlpha(0);
+    this.tweens.add({ targets:carpet, alpha:1, y:390, duration:500 });
+    Dialogue.show([
+      { speaker:'Minister', text:"Say the words. Go." }
+    ], () => {
+      this.cameras.main.fadeOut(500, 0, 0, 0);
+      this.cameras.main.once('camerafadeoutcomplete', () => {
+        this.scene.start('CarpetScene', {
+          nextScene:'LocationScene',
+          nextSceneData:{ locationKey:'ovenCouple' },
+          distance:2400
+        });
+      });
+    });
+  }
+}
+
+/* =========================================================================
+   CARPET SCENE — the world-map mechanic: tap/space to rise, dodge obstacles
+   ========================================================================= */
+class CarpetScene extends Phaser.Scene {
+  constructor() { super('CarpetScene'); }
+  init(data) {
+    this.nextScene = data.nextScene || 'LocationScene';
+    this.nextSceneData = data.nextSceneData || {};
+    this.targetDistance = data.distance || 2400;
+  }
+  create() {
+    this.distance = 0;
+    this.ended = false;
+    this.started = false;
+    this.spawnTimer = 1.0;
+
+    Touch.hide();
+    this.physics.world.setBounds(0, 0, 800, 450);
+    this.buildBackground();
+
+    makeCarpetTexture(this, 'carpet-fly');
+    this.carpet = this.physics.add.sprite(150, 225, 'carpet-fly').setScale(1.7);
+    this.carpet.body.setAllowGravity(false);
+    this.carpet.body.setSize(46, 12).setOffset(6, 3);
+    this.carpet.setCollideWorldBounds(true);
+
+    this.obstacles = this.physics.add.group();
+    this.physics.add.collider(this.carpet, this.obstacles, () => this.crash(), null, this);
+
+    this.distText = this.add.text(20, 16, '', {
+      fontFamily:'Trebuchet MS, sans-serif', fontSize:'15px', color:'#EFE3C8'
+    }).setScrollFactor(0);
+
+    this.startPrompt = this.add.text(400, 225, 'Tap, click, or press Space to rise', {
+      fontFamily:'Georgia, serif', fontSize:'19px', color:'#EFE3C8'
+    }).setOrigin(0.5);
+    this.tweens.add({ targets:this.startPrompt, alpha:0.3, duration:700, yoyo:true, repeat:-1 });
+
+    this.spaceKey = this.input.keyboard.addKey('SPACE');
+    this.input.on('pointerdown', () => this.flap());
+  }
+  update(time, delta) {
+    if (this.ended) return;
+    if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) this.flap();
+    if (!this.started) return;
+
+    const dt = delta / 1000;
+    this.distance += 210 * dt;
+    this.distText.setText('Distance: ' + Math.min(Math.floor(this.distance), this.targetDistance) + ' / ' + this.targetDistance);
+
+    if (this.carpet.body.velocity.y < -260) this.carpet.body.velocity.y = -260;
+
+    this.obstacles.getChildren().slice().forEach((o) => { if (o.x < -80) o.destroy(); });
+
+    this.spawnTimer -= dt;
+    if (this.spawnTimer <= 0) {
+      this.spawnObstacle();
+      this.spawnTimer = Phaser.Math.FloatBetween(1.35, 1.85);
+    }
+
+    if (this.distance >= this.targetDistance) this.succeed();
+  }
+  flap() {
+    if (this.ended) return;
+    if (!this.started) {
+      this.started = true;
+      this.startPrompt.setVisible(false);
+      this.carpet.body.setAllowGravity(true);
+      this.carpet.body.setGravityY(620);
+      this.carpet.body.setMaxVelocity(9999, 340);
+    }
+    this.carpet.body.setVelocityY(-260);
+    this.carpet.setAngle(-12);
+    this.time.delayedCall(220, () => { if (!this.ended) this.carpet.setAngle(6); });
+  }
+  spawnObstacle() {
+    const gapY = Phaser.Math.Between(110, 300);
+    const gapSize = 155;
+    const topH = Math.max(gapY - gapSize/2, 0);
+    const botH = Math.max(450 - (gapY + gapSize/2), 0);
+    const top = this.add.rectangle(830, 0, 46, topH, COLORS.terracottaDark).setOrigin(0, 0);
+    const bot = this.add.rectangle(830, gapY + gapSize/2, 46, botH, COLORS.terracottaDark).setOrigin(0, 0);
+    [top, bot].forEach((rect) => {
+      this.physics.add.existing(rect);
+      rect.body.setAllowGravity(false);
+      rect.body.setImmovable(true);
+      rect.body.setVelocityX(-190);
+      this.obstacles.add(rect);
+    });
+  }
+  crash() {
+    if (this.ended) return;
+    this.ended = true;
+    this.carpet.body.setVelocity(0, 0);
+    this.physics.pause();
+    this.add.rectangle(400, 225, 800, 450, 0x000000, 0.5);
+    this.add.text(400, 205, 'The carpet dips low\u2014', {
+      fontFamily:'Georgia, serif', fontSize:'21px', color:'#EFE3C8'
+    }).setOrigin(0.5);
+    this.add.text(400, 245, 'Tap, click, or press Space to try again', {
+      fontFamily:'Trebuchet MS, sans-serif', fontSize:'15px', color:'#E8A33D'
+    }).setOrigin(0.5);
+    this.time.delayedCall(350, () => {
+      this.input.once('pointerdown', () => this.scene.restart());
+      this.input.keyboard.once('keydown-SPACE', () => this.scene.restart());
+    });
+  }
+  succeed() {
+    if (this.ended) return;
+    this.ended = true;
+    this.cameras.main.fadeOut(500, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(this.nextScene, this.nextSceneData));
+  }
+  buildBackground() {
+    fillSky(this, 800, COLORS.saffron, COLORS.dusk);
+
+    const m = this.add.graphics();
+    m.fillStyle(COLORS.silhouette, 0.5);
+    m.fillTriangle(0, 340, 160, 220, 320, 340);
+    m.fillTriangle(220, 340, 420, 240, 600, 340);
+    m.fillTriangle(480, 340, 660, 250, 820, 340);
+
+    makeDomeTexture(this, 'dome-carpet-bg', COLORS.turquoise, COLORS.turquoiseDark);
+    for (let i=0;i<4;i++) {
+      this.add.image(150 + i*220, 380, 'dome-carpet-bg').setScale(1.1).setTint(0x000000).setAlpha(0.55);
+    }
+  }
+}
+
+/* =========================================================================
+   LOCATION DATA — add new keys here as future chapters are built; the
+   LocationScene class below is fully generic and reusable.
+   ========================================================================= */
+const LOCATIONS = {
+  ovenCouple: {
+    intro: "A collapsed kiln stands at the village edge. Someone here shares one robe between two people.",
+    skyTop: COLORS.saffron, skyBottom: COLORS.dusk,
+    worldWidth: 1700,
+    npcs: [
+      { x:240, color:0x6a5a4a, hint:"The couple who share one robe? Down past the well, poor souls." },
+      { x:480, color:0x5a6a4a, hint:"I don't get involved with them. Best keep walking." },
+      { x:760, color:0x4a5a6a, hint:"They keep to themselves. Why do you ask about them?" },
+      { x:1040, color:0x6a4a5a, hint:"Strange people. They never leave that old kiln together." },
+      {
+        x:1400, isTarget:true, color:0x9a9a9a,
+        dialogue: [
+          { speaker:'Old Man', text:"There's nothing here for you, traveler. Move on." },
+          { speaker:'You', text:"I mean you no harm. I only want to understand \u2014 why live like this?" },
+          { speaker:'Old Man', text:"...There's a gravekeeper somewhere. Weeps without stopping, they say." },
+          { speaker:'Old Man', text:"Twenty years we've heard scraps that he might know what became of someone we lost. We've never dared go ask ourselves." },
+          { speaker:'Old Man', text:"Bring him to speak with you first. Then maybe I'll have something to tell you." }
+        ],
+        flag:'gravekeeper-needed'
+      }
+    ]
+  }
+};
+
+/* =========================================================================
+   LOCATION SCENE — generic exploration + find-the-NPC puzzle, driven by
+   whatever entry in LOCATIONS the scene is started with.
+   ========================================================================= */
+class LocationScene extends Phaser.Scene {
+  constructor() { super('LocationScene'); }
+  init(data) { this.locKey = data.locationKey; }
+  create() {
+    const loc = LOCATIONS[this.locKey];
+    this.loc = loc;
+    this.physics.world.setBounds(0, 0, loc.worldWidth, 450);
+    this.cameras.main.setBounds(0, 0, loc.worldWidth, 450);
+
+    this.buildBackground(loc);
+
+    makePersonTexture(this, 'player-tex3', COLORS.terracotta, 0xE0B88A);
+    this.player = this.physics.add.sprite(60, 340, 'player-tex3').setScale(1.4);
+    this.player.setCollideWorldBounds(true);
+    this.player.body.setSize(20, 26).setOffset(4, 16);
+    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+
+    loc.npcs.forEach((npc, i) => {
+      const key = 'npc-' + this.locKey + '-' + i;
+      makePersonTexture(this, key, npc.color, npc.isTarget ? 0xEFE3C8 : 0xC9BFAA);
+      const spr = this.physics.add.staticSprite(npc.x, 340, key).setScale(1.4);
+      spr.npcData = npc;
+      spr.met = false;
+      this.physics.add.overlap(this.player, spr, () => this.talkTo(spr));
+    });
+
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.keyA = this.input.keyboard.addKey('A');
+    this.keyD = this.input.keyboard.addKey('D');
+
+    Touch.show();
+    this.time.delayedCall(250, () => showHint(loc.intro));
+  }
+  update() {
+    if (Dialogue.active || this.sliceEnded) { this.player.setVelocityX(0); return; }
+    const left = this.cursors.left.isDown || this.keyA.isDown || Touch.left;
+    const right = this.cursors.right.isDown || this.keyD.isDown || Touch.right;
+    const speed = 190;
+    if (left) { this.player.setVelocityX(-speed); this.player.setFlipX(true); }
+    else if (right) { this.player.setVelocityX(speed); this.player.setFlipX(false); }
+    else { this.player.setVelocityX(0); }
+  }
+  talkTo(spr) {
+    if (Dialogue.active || this.sliceEnded) return;
+    const npc = spr.npcData;
+    if (npc.isTarget) {
+      Dialogue.show(npc.dialogue, () => {
+        if (npc.flag) GameState.set(npc.flag, true);
+        this.endOfSlice();
+      });
+    } else {
+      if (spr.met) return;
+      spr.met = true;
+      Dialogue.show([{ speaker:'Villager', text:npc.hint }]);
+    }
+  }
+  endOfSlice() {
+    this.sliceEnded = true;
+    Touch.hide();
+    const sx = this.cameras.main.scrollX;
+    this.add.rectangle(sx+400, 225, 800, 450, 0x0b0714, 0.88).setScrollFactor(0).setDepth(50);
+    this.add.text(sx+400, 180, 'You need to find the Gravekeeper.', {
+      fontFamily:'Georgia, serif', fontSize:'21px', color:'#EFE3C8'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
+    this.add.text(sx+400, 226, '\u2014 End of this preview build \u2014', {
+      fontFamily:'Georgia, serif', fontSize:'15px', fontStyle:'italic', color:'#E8A33D'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
+    this.add.text(sx+400, 262, 'More chapters are on the way.', {
+      fontFamily:'Trebuchet MS, sans-serif', fontSize:'13px', color:'#EFE3C8'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
+  }
+  buildBackground(loc) {
+    const g = this.add.graphics();
+    g.fillGradientStyle(loc.skyTop, loc.skyTop, loc.skyBottom, loc.skyBottom, 1);
+    g.fillRect(0, 0, loc.worldWidth, 450);
+    g.setScrollFactor(0.3);
+
+    const ground = this.add.graphics();
+    ground.fillStyle(COLORS.terracotta, 1);
+    ground.fillRect(0, 380, loc.worldWidth, 70);
+
+    const kiln = this.add.graphics();
+    kiln.fillStyle(COLORS.terracottaDark, 1);
+    kiln.fillRoundedRect(1340, 300, 120, 90, { tl:40, tr:40, br:6, bl:6 });
+    kiln.fillStyle(COLORS.ink, 0.6);
+    kiln.fillRoundedRect(1375, 340, 50, 50, { tl:20, tr:20, br:0, bl:0 });
+
+    for (let i=0;i<7;i++) {
+      const hut = this.add.graphics();
+      const x = 140 + i*220;
+      hut.fillStyle(COLORS.terracottaDark, 1);
+      hut.fillRect(x, 325, 78, 58);
+      hut.fillTriangle(x-6, 325, x+84, 325, x+39, 292);
+      hut.setScrollFactor(0.8);
+    }
+  }
+}
+
+/* =========================================================================
+   BOOT
+   ========================================================================= */
+window.addEventListener('load', () => {
+  GameState.restore();
+  new Phaser.Game({
+    type: Phaser.AUTO,
+    width: 800,
+    height: 450,
+    parent: 'game-container',
+    backgroundColor: '#1B1330',
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    physics: { default:'arcade', arcade:{ gravity:{ y:0 }, debug:false } },
+    scene: [TitleScene, IntroScene, MonthsEarlierScene, VillageScene, PalaceScene, CarpetScene, LocationScene]
+  });
+});
+</script>
 </body>
 </html>
