@@ -10,8 +10,6 @@
   #game-container { width:100%; height:100%; display:flex; align-items:center; justify-content:center; touch-action:none; }
   #game-container canvas { max-width:100%; max-height:100%; }
 
-  /* Dialogue box: an arch-topped panel, echoing an iwan doorway. This is the one
-     recurring signature shape in the UI — everything else stays plain. */
   #dialogue-box {
     position:fixed; left:50%; bottom:4%;
     transform:translateX(-50%);
@@ -19,13 +17,11 @@
     background:linear-gradient(180deg,#2a2044 0%,#1B1330 100%);
     border:2px solid #E8A33D;
     border-radius:18px 18px 6px 6px;
-    padding:22px 26px 18px;
+    padding:20px 90px 18px 26px;
     color:#EFE3C8;
     font-family:Georgia,'Times New Roman',serif;
     box-shadow:0 8px 30px rgba(0,0,0,0.55);
-    cursor:pointer;
     z-index:20;
-    touch-action:none;
     transition:opacity 0.2s ease, transform 0.2s ease;
   }
   #dialogue-box::before {
@@ -44,28 +40,33 @@
     font-size:12px; letter-spacing:2px; text-transform:uppercase;
     color:#4EC9C0; margin-bottom:6px;
   }
-  #dialogue-text { font-size:19px; line-height:1.45; }
-  #dialogue-next {
-    position:absolute; right:18px; bottom:10px;
-    font-size:11px; color:#E8A33D; opacity:0.85;
-    animation:bob 1.2s ease-in-out infinite;
+  #dialogue-text { font-size:19px; line-height:1.45; min-height:52px; }
+  #dialogue-next-btn {
+    position:absolute; right:16px; bottom:16px;
+    background:#E8A33D; color:#1B1330;
+    font-family:'Trebuchet MS',sans-serif; font-weight:bold; font-size:13px;
+    padding:8px 14px; border-radius:20px;
+    display:flex; align-items:center; gap:5px;
+    cursor:pointer; touch-action:none;
+    animation:pulse 1.4s ease-in-out infinite;
+    box-shadow:0 2px 8px rgba(0,0,0,0.4);
   }
-  @keyframes bob { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(4px); } }
+  #dialogue-next-btn:active { transform:scale(0.94); }
+  @keyframes pulse { 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.06); } }
 
-  #touch-controls {
-    position:fixed; bottom:6%; left:0; right:0;
-    display:flex; justify-content:space-between; padding:0 6%;
-    z-index:15; pointer-events:none;
+  #dpad {
+    position:fixed; bottom:6%; left:5%;
+    display:grid; grid-template-columns:repeat(3,50px); grid-template-rows:repeat(3,50px); gap:3px;
+    z-index:15;
   }
-  #touch-controls.hidden { display:none; }
+  #dpad.hidden { display:none; }
   .touch-btn {
-    pointer-events:auto; touch-action:none;
-    width:62px; height:62px;
+    touch-action:none;
     background:rgba(239,227,200,0.14);
-    border:2px solid rgba(239,227,200,0.55);
-    border-radius:50%;
+    border:2px solid rgba(239,227,200,0.5);
+    border-radius:10px;
     display:flex; align-items:center; justify-content:center;
-    font-size:22px; color:#EFE3C8;
+    font-size:16px; color:#EFE3C8;
     user-select:none; -webkit-user-select:none;
   }
   .touch-btn:active { background:rgba(239,227,200,0.32); }
@@ -83,7 +84,7 @@
 
   @media (max-width:700px) {
     #dialogue-text { font-size:16px; }
-    .touch-btn { width:54px; height:54px; }
+    #dialogue-box { padding:18px 80px 16px 20px; }
   }
 </style>
 </head>
@@ -94,12 +95,13 @@
 <div id="dialogue-box" class="hidden">
   <div id="dialogue-speaker"></div>
   <div id="dialogue-text"></div>
-  <div id="dialogue-next">tap ▼</div>
+  <div id="dialogue-next-btn">Next &#9654;</div>
 </div>
 
-<div id="touch-controls" class="hidden">
-  <div id="btn-left" class="touch-btn">◀</div>
-  <div id="btn-right" class="touch-btn">▶</div>
+<div id="dpad" class="hidden">
+  <div></div><div id="btn-up" class="touch-btn">&#9650;</div><div></div>
+  <div id="btn-left" class="touch-btn">&#9664;</div><div></div><div id="btn-right" class="touch-btn">&#9654;</div>
+  <div></div><div id="btn-down" class="touch-btn">&#9660;</div><div></div>
 </div>
 
 <div id="hint-banner" class="hidden"></div>
@@ -107,67 +109,61 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.90.0/phaser.min.js"></script>
 <script>
 /* =========================================================================
-   THE FLYING CARPET — vertical slice
-   Chapters covered: Village -> Palace -> Carpet Flight -> Oven Couple
+   THE FLYING CARPET — vertical slice v2
+   Illustrated-vector art system + fixed carpet mechanic + free-roam bazaar.
+   Deferred to next pass: the illustrated route-map scene between village
+   and palace (see the exit zone comment in AREAS.village).
    ========================================================================= */
 
-/* ---------- palette (Timurid-inspired: sunset gold, Samarkand turquoise) --------- */
 const COLORS = {
-  ink: 0x1B1330,
-  dusk: 0x4A2F6B,
-  saffron: 0xE8A33D,
-  turquoise: 0x2F9B96,
-  turquoiseDark: 0x1F6B66,
-  terracotta: 0xC17A4F,
-  terracottaDark: 0x8A5A3C,
-  parchment: 0xEFE3C8,
-  silhouette: 0x241A2E
+  ink:0x1B1330, outline:0x2A1B3D, dusk:0x4A2F6B,
+  saffron:0xE8A33D, gold:0xF0C85A,
+  turquoise:0x2F9B96, turquoiseDark:0x1F6B66,
+  terracotta:0xC17A4F, terracottaDark:0x8A5A3C,
+  parchment:0xEFE3C8, silhouette:0x241A2E,
+  crimson:0x8B2635,
+  skin1:0xE0B88A, skin2:0xC98F5E,
+  leaf:0x5C8A52, leafDark:0x3E6339, bark:0x6B4A35,
+  rock:0x8A8478, rockDark:0x625D53,
+  water:0x4EC9C0, cloudWhite:0xF5EEDD, sand:0xD9B98A
 };
 
-/* ---------- save state -----------------------------------------------------------
-   In-memory only for now: this file previews as an artifact inside Claude.ai, and
-   that sandbox blocks localStorage entirely. Once this is sitting on your own
-   GitHub Pages URL (a normal, unsandboxed page), swap persist()/restore() below
-   for real localStorage calls and progress will survive a refresh. Nothing else
-   in the file needs to change. */
+/* ---------- save state (in-memory in this preview; see note at bottom) --- */
 const GameState = {
-  flags: {},
-  set(key, val) { this.flags[key] = val; this.persist(); },
-  get(key) { return this.flags[key]; },
-  persist() { window.__flyingCarpetSave = JSON.stringify(this.flags); },
-  restore() {
-    if (window.__flyingCarpetSave) {
-      try { this.flags = JSON.parse(window.__flyingCarpetSave); } catch (e) { /* ignore */ }
-    }
-  }
+  flags:{},
+  set(k,v){ this.flags[k]=v; this.persist(); },
+  get(k){ return this.flags[k]; },
+  persist(){ window.__flyingCarpetSave = JSON.stringify(this.flags); },
+  restore(){ if (window.__flyingCarpetSave){ try{ this.flags = JSON.parse(window.__flyingCarpetSave); }catch(e){} } }
 };
 
-/* ---------- dialogue box (HTML overlay, not drawn on canvas) --------------------- */
+/* ---------- dialogue (HTML overlay; advances ONLY via the Next button) --- */
 const Dialogue = {
-  el:null, speakerEl:null, textEl:null,
+  el:null, speakerEl:null, textEl:null, btnEl:null,
   queue:[], active:false, onDone:null,
-  init() {
+  init(){
     this.el = document.getElementById('dialogue-box');
     this.speakerEl = document.getElementById('dialogue-speaker');
     this.textEl = document.getElementById('dialogue-text');
-    this.el.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.advance(); });
+    this.btnEl = document.getElementById('dialogue-next-btn');
+    this.btnEl.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.advance(); });
   },
-  show(lines, onDone) {
+  show(lines, onDone){
     this.queue = lines.slice();
     this.onDone = onDone || null;
     this.active = true;
     this.el.classList.remove('hidden');
     this._next();
   },
-  _next() {
+  _next(){
     if (this.queue.length === 0) { this._close(); return; }
     const line = this.queue.shift();
-    if (line.speaker) { this.speakerEl.textContent = line.speaker; this.speakerEl.style.display = 'block'; }
-    else { this.speakerEl.style.display = 'none'; }
+    if (line.speaker) { this.speakerEl.textContent = line.speaker; this.speakerEl.style.display='block'; }
+    else { this.speakerEl.style.display='none'; }
     this.textEl.textContent = line.text;
   },
-  advance() { if (this.active) this._next(); },
-  _close() {
+  advance(){ if (this.active) this._next(); },
+  _close(){
     this.active = false;
     this.el.classList.add('hidden');
     const cb = this.onDone; this.onDone = null;
@@ -175,11 +171,11 @@ const Dialogue = {
   }
 };
 
-/* ---------- touch controls (left/right only; carpet scene uses tap-anywhere) ----- */
+/* ---------- touch d-pad (4-directional; hidden during carpet/dialogue scenes) */
 const Touch = {
-  left:false, right:false, el:null,
-  init() {
-    this.el = document.getElementById('touch-controls');
+  left:false, right:false, up:false, down:false, el:null,
+  init(){
+    this.el = document.getElementById('dpad');
     const bind = (id, prop) => {
       const btn = document.getElementById(id);
       btn.addEventListener('pointerdown', (e) => { e.preventDefault(); this[prop] = true; });
@@ -187,11 +183,11 @@ const Touch = {
       btn.addEventListener('pointerleave', () => { this[prop] = false; });
       btn.addEventListener('pointercancel', () => { this[prop] = false; });
     };
-    bind('btn-left','left');
-    bind('btn-right','right');
+    bind('btn-left','left'); bind('btn-right','right');
+    bind('btn-up','up'); bind('btn-down','down');
   },
-  show() { this.el.classList.remove('hidden'); },
-  hide() { this.el.classList.add('hidden'); this.left = false; this.right = false; }
+  show(){ this.el.classList.remove('hidden'); },
+  hide(){ this.el.classList.add('hidden'); this.left=this.right=this.up=this.down=false; }
 };
 
 function showHint(text, duration) {
@@ -199,10 +195,17 @@ function showHint(text, duration) {
   el.textContent = text;
   el.classList.remove('hidden');
   clearTimeout(showHint._t);
-  showHint._t = setTimeout(() => el.classList.add('hidden'), duration || 3200);
+  showHint._t = setTimeout(() => el.classList.add('hidden'), duration || 3400);
 }
 
-/* ---------- procedural art helpers (no image files -- everything is drawn) ------- */
+/* =========================================================================
+   PROCEDURAL ART — everything below is drawn in code (no image files).
+   Rule followed throughout: physics-relevant sprites are baked at their
+   FINAL pixel size with no runtime setScale(), so Arcade Physics can
+   auto-size their collision body from the texture frame with no manual
+   offsets to get wrong. Manual body sizing is used in exactly one place
+   (the carpet) and is set to match its texture dimensions exactly.
+   ========================================================================= */
 function ensureTexture(scene, key, w, h, drawFn) {
   if (scene.textures.exists(key)) return key;
   const g = scene.add.graphics();
@@ -212,258 +215,551 @@ function ensureTexture(scene, key, w, h, drawFn) {
   return key;
 }
 
-function makePersonTexture(scene, key, bodyColor, headColor) {
-  return ensureTexture(scene, key, 28, 44, (g) => {
-    g.fillStyle(headColor, 1);
-    g.fillCircle(14, 10, 9);
-    g.fillStyle(bodyColor, 1);
-    g.fillRoundedRect(4, 16, 20, 26, 6);
+function fillSky(scene, width, height, top, bottom) {
+  const g = scene.add.graphics();
+  g.fillGradientStyle(top, top, bottom, bottom, 1);
+  g.fillRect(0, 0, width, height);
+  return g;
+}
+
+/* ---- characters: layered, outlined, chibi-proportioned, 3-5 colors ----- */
+function makeCharacterTexture(scene, key, opts) {
+  const o = Object.assign({
+    skin:COLORS.skin1, robe:COLORS.terracotta, accent:COLORS.saffron,
+    headwear:'cap', headwearColor:0x5a4a6a, beard:false, expression:'neutral'
+  }, opts);
+  const W = 44, H = 66;
+  return ensureTexture(scene, key, W, H, (g) => {
+    const cx = W/2;
+    g.fillStyle(0x000000, 0.18);
+    g.fillEllipse(cx, H-3, 26, 7);
+
+    g.fillStyle(COLORS.outline, 1);
+    g.fillRoundedRect(cx-13, H-22, 12, 18, 5);
+    g.fillRoundedRect(cx+1, H-22, 12, 18, 5);
+    g.fillStyle(o.skin, 1);
+    g.fillRoundedRect(cx-11, H-20, 10, 16, 5);
+    g.fillRoundedRect(cx+1, H-20, 10, 16, 5);
+
+    g.fillStyle(COLORS.outline, 1);
+    g.fillRoundedRect(cx-19, 22, 38, 32, {tl:9,tr:9,bl:5,br:5});
+    g.fillStyle(o.robe, 1);
+    g.fillRoundedRect(cx-17, 24, 34, 30, {tl:8,tr:8,bl:4,br:4});
+    g.fillStyle(o.accent, 1);
+    g.fillRect(cx-17, 40, 34, 5);
+
+    g.fillStyle(COLORS.outline, 1);
+    g.fillRoundedRect(cx-25, 27, 10, 22, 5);
+    g.fillRoundedRect(cx+15, 27, 10, 22, 5);
+    g.fillStyle(o.robe, 1);
+    g.fillRoundedRect(cx-23, 28, 8, 20, 4);
+    g.fillRoundedRect(cx+15, 28, 8, 20, 4);
+
+    const headY = 20, headR = 15;
+    g.fillStyle(COLORS.outline, 1);
+    g.fillCircle(cx, headY, headR+2.5);
+    g.fillStyle(o.skin, 1);
+    g.fillCircle(cx, headY, headR);
+
+    if (o.beard) {
+      g.fillStyle(0x3a322a, 1);
+      g.fillEllipse(cx, headY+12, 17, 13);
+      g.fillStyle(o.skin, 1);
+      g.fillEllipse(cx, headY+6, 15, 9);
+    }
+
+    drawHeadwear(g, cx, headY, headR, o.headwear, o.headwearColor);
+
+    const eyeY = headY - 1, eyeDX = 6;
+    let browTilt = 0, mouthCurve = 0;
+    if (o.expression === 'stern') { browTilt = 3; mouthCurve = -1.5; }
+    else if (o.expression === 'kind') { browTilt = -2; mouthCurve = 1.5; }
+
+    g.fillStyle(COLORS.outline, 1);
+    g.fillEllipse(cx-eyeDX, eyeY, 4.5, 5.5);
+    g.fillEllipse(cx+eyeDX, eyeY, 4.5, 5.5);
+    g.fillStyle(0xffffff, 0.95);
+    g.fillCircle(cx-eyeDX+1.3, eyeY-1.3, 1.2);
+    g.fillCircle(cx+eyeDX+1.3, eyeY-1.3, 1.2);
+
+    g.lineStyle(2, COLORS.outline, 1);
+    g.beginPath(); g.moveTo(cx-eyeDX-4, eyeY-6-browTilt); g.lineTo(cx-eyeDX+4, eyeY-7+browTilt); g.strokePath();
+    g.beginPath(); g.moveTo(cx+eyeDX-4, eyeY-7+browTilt); g.lineTo(cx+eyeDX+4, eyeY-6-browTilt); g.strokePath();
+
+    if (!o.beard) {
+      g.lineStyle(2, COLORS.outline, 0.85);
+      g.beginPath();
+      g.moveTo(cx-5, headY+8+mouthCurve); g.lineTo(cx, headY+9-mouthCurve); g.lineTo(cx+5, headY+8+mouthCurve);
+      g.strokePath();
+    }
+  });
+}
+
+function drawHeadwear(g, cx, headY, headR, type, color) {
+  if (type === 'none') return;
+  if (type === 'cap') {
+    g.fillStyle(COLORS.outline, 1);
+    g.fillEllipse(cx, headY-headR+3, headR*1.5+3, 12);
+    g.fillStyle(color, 1);
+    g.fillEllipse(cx, headY-headR+3, headR*1.5, 10);
+  } else if (type === 'turban') {
+    g.fillStyle(COLORS.outline, 1);
+    g.fillEllipse(cx, headY-headR+2, headR*1.9+3, 20);
+    g.fillStyle(color, 1);
+    g.fillEllipse(cx, headY-headR+2, headR*1.9, 18);
+    g.fillStyle(COLORS.outline, 0.35);
+    g.fillRect(cx-headR*0.9, headY-headR-2, headR*1.8, 3);
+  } else if (type === 'crown') {
+    g.fillStyle(COLORS.outline, 1);
+    g.fillEllipse(cx, headY-headR+4, headR*1.8+3, 14);
+    g.fillStyle(color, 1);
+    g.fillEllipse(cx, headY-headR+4, headR*1.8, 12);
+    g.fillStyle(COLORS.gold, 1);
+    g.fillTriangle(cx-9, headY-headR+2, cx+9, headY-headR+2, cx, headY-headR-18);
+    g.fillStyle(0xC0392B, 1);
+    g.fillCircle(cx, headY-headR-3, 3.4);
+  } else if (type === 'helmet') {
+    g.fillStyle(COLORS.outline, 1);
+    g.fillCircle(cx, headY-3, headR+3);
+    g.fillStyle(color, 1);
+    g.fillCircle(cx, headY-3, headR+1);
+    g.fillStyle(COLORS.gold, 1);
+    g.fillTriangle(cx-3, headY-headR-1, cx+3, headY-headR-1, cx, headY-headR-9);
+  }
+}
+
+/* ---- a properly unsettling skull for the intro hall ---- */
+function makeSkullTexture(scene, key) {
+  const W=34, H=40;
+  return ensureTexture(scene, key, W, H, (g) => {
+    g.fillStyle(0x1a1420, 0.6);
+    g.fillEllipse(W/2, H*0.9, W*0.7, H*0.16);
+    g.fillStyle(0x8f8570, 1);
+    g.fillEllipse(W/2, H*0.38, W*0.82, H*0.58);
+    g.fillTriangle(W*0.16, H*0.42, W*0.84, H*0.42, W/2, H*0.9);
+    g.fillStyle(0x14101c, 1);
+    g.fillEllipse(W*0.34, H*0.4, W*0.2, H*0.24);
+    g.fillEllipse(W*0.66, H*0.4, W*0.2, H*0.24);
+    g.fillTriangle(W*0.46, H*0.52, W*0.54, H*0.52, W/2, H*0.64);
+    g.fillStyle(0x14101c, 0.55);
+    g.fillRect(W*0.3, H*0.84, W*0.4, 3);
+    g.fillStyle(0x8f8570, 1);
+    for (let i=0;i<4;i++) g.fillRect(W*0.32+i*W*0.09, H*0.8, W*0.06, H*0.14);
   });
 }
 
 function makeDomeTexture(scene, key, color, ribColor) {
-  const w = 70, h = 90;
+  const w=70, h=90;
   return ensureTexture(scene, key, w, h, (g) => {
     g.fillStyle(COLORS.terracottaDark, 1);
     g.fillRect(w*0.30, h*0.55, w*0.40, h*0.45);
+    g.fillStyle(COLORS.outline, 1);
+    g.fillEllipse(w/2, h*0.42, w*0.86, h*0.66);
     g.fillStyle(color, 1);
-    g.fillEllipse(w/2, h*0.42, w*0.82, h*0.62);
+    g.fillEllipse(w/2, h*0.42, w*0.8, h*0.6);
     g.fillTriangle(w/2, 0, w*0.42, h*0.28, w*0.58, h*0.28);
     g.lineStyle(2, ribColor, 0.6);
-    g.beginPath();
-    g.moveTo(w*0.20, h*0.44); g.lineTo(w*0.50, h*0.16); g.lineTo(w*0.80, h*0.44);
-    g.strokePath();
+    g.beginPath(); g.moveTo(w*0.2, h*0.44); g.lineTo(w*0.5, h*0.16); g.lineTo(w*0.8, h*0.44); g.strokePath();
+    g.fillStyle(COLORS.gold, 1);
+    g.fillCircle(w/2, 0, 3);
   });
 }
 
 function makeMinaretTexture(scene, key) {
-  const w = 34, h = 200;
+  const w=34, h=200;
   return ensureTexture(scene, key, w, h, (g) => {
+    g.fillStyle(COLORS.outline, 1);
+    g.fillRect(w*0.24, h*0.18, w*0.52, h*0.82);
     g.fillStyle(COLORS.terracotta, 1);
-    g.fillRect(w*0.25, h*0.18, w*0.50, h*0.82);
+    g.fillRect(w*0.27, h*0.2, w*0.46, h*0.78);
     g.fillStyle(COLORS.saffron, 1);
     g.fillRect(w*0.18, h*0.32, w*0.64, 5);
+    g.fillRect(w*0.18, h*0.6, w*0.64, 5);
     g.fillStyle(COLORS.turquoise, 1);
-    g.fillEllipse(w/2, h*0.14, w*0.66, h*0.20);
-    g.fillTriangle(w/2, 0, w*0.38, h*0.10, w*0.62, h*0.10);
+    g.fillEllipse(w/2, h*0.14, w*0.66, h*0.2);
+    g.fillTriangle(w/2, 0, w*0.38, h*0.1, w*0.62, h*0.1);
   });
 }
 
-function makeCarpetTexture(scene, key) {
-  const w = 60, h = 18;
+function makeBuildingTexture(scene, key, type) {
+  const W = type==='mosque'?90:(type==='stall'?70:80);
+  const H = type==='mosque'?110:(type==='stall'?55:75);
+  return ensureTexture(scene, key, W, H, (g) => {
+    if (type === 'stall') {
+      g.fillStyle(COLORS.outline,1); g.fillRect(1,H*0.1-2,W-2,H*0.24+3);
+      g.fillStyle(COLORS.crimson,1); g.fillRect(4,H*0.12,W-8,H*0.2);
+      for (let i=0;i<5;i++){
+        g.fillStyle(i%2===0?COLORS.parchment:COLORS.crimson,1);
+        const sx=4+i*(W-8)/5;
+        g.fillTriangle(sx,H*0.32,sx+(W-8)/5,H*0.32,sx+(W-8)/10,H*0.32+6);
+      }
+      g.fillStyle(COLORS.outline,1); g.fillRect(4,H*0.54-2,W-8,H*0.4+4);
+      g.fillStyle(COLORS.terracottaDark,1); g.fillRect(6,H*0.55,W-12,H*0.38);
+      const dotColors=[COLORS.gold,COLORS.crimson,COLORS.turquoise];
+      for(let i=0;i<4;i++){ g.fillStyle(dotColors[i%3],1); g.fillCircle(16+i*11, H*0.62, 4.5); }
+    } else if (type === 'mosque') {
+      g.fillStyle(COLORS.outline,1); g.fillRect(W*0.15-2,H*0.35-2,W*0.7+4,H*0.65+4);
+      g.fillStyle(COLORS.terracotta,1); g.fillRect(W*0.15,H*0.35,W*0.7,H*0.65);
+      g.fillStyle(COLORS.outline,1); g.fillEllipse(W/2,H*0.32,W*0.64,H*0.42);
+      g.fillStyle(COLORS.turquoise,1); g.fillEllipse(W/2,H*0.32,W*0.6,H*0.38);
+      g.lineStyle(2,COLORS.turquoiseDark,0.7);
+      g.beginPath(); g.moveTo(W*0.28,H*0.34); g.lineTo(W/2,H*0.08); g.lineTo(W*0.72,H*0.34); g.strokePath();
+      g.fillStyle(COLORS.gold,1); g.fillCircle(W/2,H*0.05,4);
+      g.fillStyle(0x14101c,0.7); g.fillRoundedRect(W*0.4,H*0.68,W*0.2,H*0.32,{tl:10,tr:10,bl:0,br:0});
+      g.lineStyle(1,COLORS.gold,0.5);
+      for(let i=0;i<3;i++) g.strokeCircle(W*0.15+ i*W*0.23,H*0.5,4);
+    } else {
+      g.fillStyle(COLORS.outline,1); g.fillRect(1,H*0.3-2,W-2,H*0.7+3);
+      g.fillStyle(COLORS.terracottaDark,1); g.fillRect(2,H*0.32,W-4,H*0.68);
+      g.fillStyle(COLORS.outline,1); g.fillTriangle(-3,H*0.32+2,W+3,H*0.32+2,W/2,-3);
+      g.fillStyle(COLORS.crimson,1); g.fillTriangle(0,H*0.32,W,H*0.32,W/2,2);
+      g.fillStyle(0x14101c,0.65); g.fillRoundedRect(W*0.38,H*0.62,W*0.24,H*0.38,{tl:6,tr:6,bl:0,br:0});
+      g.fillStyle(COLORS.saffron,0.85); g.fillRect(W*0.14,H*0.46,W*0.16,W*0.16);
+      g.fillStyle(COLORS.saffron,0.85); g.fillRect(W*0.7,H*0.46,W*0.16,W*0.16);
+      g.lineStyle(1,COLORS.outline,0.6);
+      g.strokeRect(W*0.14,H*0.46,W*0.16,W*0.16); g.strokeRect(W*0.7,H*0.46,W*0.16,W*0.16);
+    }
+  });
+}
+
+function makeTreeTexture(scene, key) {
+  const W=26,H=54;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(COLORS.outline,1); g.fillRect(W/2-5,H*0.55-1,10,H*0.45+1);
+    g.fillStyle(COLORS.bark,1); g.fillRect(W/2-4,H*0.55,8,H*0.45);
+    g.fillStyle(COLORS.outline,1); g.fillEllipse(W/2,H*0.3,W*0.92+3,H*0.64+3);
+    g.fillStyle(COLORS.leaf,1); g.fillEllipse(W/2,H*0.3,W*0.92,H*0.64);
+    g.fillStyle(COLORS.leafDark,0.5); g.fillEllipse(W*0.4,H*0.38,W*0.4,H*0.3);
+  });
+}
+
+function makeRockTexture(scene, key) {
+  const W=34,H=20;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(COLORS.outline,1); g.fillEllipse(W/2,H*0.58,W+3,H*0.9+3);
+    g.fillStyle(COLORS.rock,1); g.fillEllipse(W/2,H*0.58,W,H*0.9);
+    g.fillStyle(COLORS.rockDark,0.5); g.fillEllipse(W*0.35,H*0.48,W*0.4,H*0.4);
+  });
+}
+
+function makeWellTexture(scene, key) {
+  const W=46,H=40;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(COLORS.outline,1); g.fillEllipse(W/2,H*0.7,W+3,H*0.55+3);
+    g.fillStyle(COLORS.terracottaDark,1); g.fillEllipse(W/2,H*0.7,W,H*0.55);
+    g.fillStyle(0x14101c,1); g.fillEllipse(W/2,H*0.68,W*0.6,H*0.3);
+    g.fillStyle(COLORS.water,0.85); g.fillEllipse(W/2,H*0.7,W*0.5,H*0.22);
+    g.fillStyle(COLORS.outline,1);
+    g.fillRect(W*0.15-2,H*0.12,4,H*0.48); g.fillRect(W*0.85-2,H*0.12,4,H*0.48);
+    g.fillRect(W*0.1,H*0.1,W*0.8,4);
+  });
+}
+
+function makeGateTexture(scene, key) {
+  const W=76,H=110;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(COLORS.outline,1); g.fillRect(2,10,17,H-8); g.fillRect(W-19,10,17,H-8);
+    g.fillStyle(COLORS.terracotta,1); g.fillRect(4,12,13,H-12); g.fillRect(W-17,12,13,H-12);
+    g.fillStyle(COLORS.outline,1); g.fillEllipse(W/2,14,W*0.62+4,26+4);
+    g.fillStyle(COLORS.turquoise,1); g.fillEllipse(W/2,14,W*0.62,26);
+    g.fillStyle(COLORS.gold,1); g.fillCircle(W/2,H*0.42,5);
+  });
+}
+
+function makeBannerTexture(scene,key){
+  const W=30,H=90;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(COLORS.outline,1); g.fillRect(-1,-1,W+2,H*0.82+2);
+    g.fillStyle(COLORS.turquoiseDark,1); g.fillRect(0,0,W,H*0.8);
+    g.fillTriangle(0,H*0.8,W,H*0.8,W/2,H);
+    g.fillStyle(COLORS.gold,0.85); g.fillRect(4,10,W-8,4);
+  });
+}
+
+function makeTorchFlame(scene, key) {
+  const W=14,H=20;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(0xE8A33D,1); g.fillEllipse(W/2,H*0.55,W*0.7,H*0.7);
+    g.fillStyle(0xF5D68C,1); g.fillEllipse(W/2,H*0.4,W*0.4,H*0.5);
+  });
+}
+
+/* ---- wide repeating strips used as TileSprite sources for real parallax scroll ---- */
+function makeMountainStripTexture(scene, key) {
+  const W=500,H=170;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(COLORS.silhouette,0.55);
+    g.fillTriangle(0,H,110,H*0.35,230,H);
+    g.fillTriangle(150,H,300,H*0.15,420,H);
+    g.fillTriangle(340,H,460,H*0.4,W+40,H);
+  });
+}
+function makeCityStripTexture(scene, key) {
+  const W=500,H=140;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(COLORS.silhouette,0.6);
+    [40,150,260,380].forEach((x)=>{ g.fillRect(x,H*0.45,26,H*0.55); g.fillEllipse(x+13,H*0.4,30,22); });
+    [100,220,340,460].forEach((x)=>{ g.fillRect(x,H*0.55,12,H*0.45); g.fillTriangle(x-3,H*0.55,x+15,H*0.55,x+6,H*0.4); });
+  });
+}
+function makeCloudStripTexture(scene, key) {
+  const W=500,H=70;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(COLORS.cloudWhite,0.65);
+    [60,220,380].forEach((x)=>{ g.fillEllipse(x,H*0.5,70,26); g.fillEllipse(x+30,H*0.42,44,20); g.fillEllipse(x-28,H*0.46,40,18); });
+  });
+}
+function makeGroundStripTexture(scene, key) {
+  const W=500,H=40;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(COLORS.sand,1); g.fillRect(0,0,W,H);
+    g.fillStyle(COLORS.terracottaDark,0.4);
+    for(let i=0;i<12;i++) g.fillEllipse(i*44+20,H*0.3,30,6);
+  });
+}
+
+/* ---- the carpet: baked at final size, patterned, plus separate swaying tassels ---- */
+function makeCarpetTexture(scene, key, w, h) {
   return ensureTexture(scene, key, w, h, (g) => {
-    g.fillStyle(COLORS.terracotta, 1);
-    g.fillRoundedRect(0, 2, w, h-4, 4);
-    g.fillStyle(COLORS.saffron, 1);
-    g.fillRect(4, 2, w-8, 3);
-    g.fillRect(4, h-5, w-8, 3);
-    g.fillStyle(COLORS.turquoise, 1);
-    for (let i=0;i<4;i++) g.fillRect(6+i*12, 7, 4, 4);
-    g.fillStyle(COLORS.saffron, 1);
-    g.fillRect(0, 4, 3, h-8);
-    g.fillRect(w-3, 4, 3, h-8);
+    g.fillStyle(COLORS.outline,1); g.fillRoundedRect(-1,-1,w+2,h+2,6);
+    g.fillStyle(COLORS.crimson,1); g.fillRoundedRect(0,0,w,h,5);
+    g.fillStyle(COLORS.gold,1); g.fillRect(3,3,w-6,3); g.fillRect(3,h-6,w-6,3);
+    const count = Math.floor((w-16)/10);
+    for (let i=0;i<count;i++) {
+      g.fillStyle(COLORS.turquoise,1);
+      const dx = 8+i*10, dy=h/2;
+      g.fillTriangle(dx,dy-4,dx+4,dy,dx,dy+4);
+      g.fillTriangle(dx+4,dy,dx+8,dy-4,dx+8,dy+4);
+    }
+    g.fillStyle(COLORS.gold,1); g.fillCircle(w/2,h/2,4);
+  });
+}
+function makeTasselTexture(scene, key) {
+  const W=16,H=26;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.lineStyle(2,COLORS.gold,1);
+    g.beginPath(); g.moveTo(W/2,0); g.lineTo(W/2,H*0.4); g.strokePath();
+    for(let i=0;i<4;i++){
+      g.lineStyle(2,COLORS.gold,0.9);
+      g.beginPath(); g.moveTo(W*0.2+i*(W*0.6/3), H*0.4); g.lineTo(W*0.2+i*(W*0.6/3), H); g.strokePath();
+    }
   });
 }
 
-function fillSky(scene, width, top, bottom) {
-  const g = scene.add.graphics();
-  g.fillGradientStyle(top, top, bottom, bottom, 1);
-  g.fillRect(0, 0, width, 450);
-  return g;
-}
+const PLAYER_APPEARANCE = { skin:COLORS.skin1, robe:COLORS.terracotta, accent:COLORS.saffron, headwear:'cap', headwearColor:0x6b4a35, expression:'neutral' };
 
 /* =========================================================================
    TITLE SCENE
    ========================================================================= */
 class TitleScene extends Phaser.Scene {
-  constructor() { super('TitleScene'); }
-  create() {
-    fillSky(this, 800, COLORS.ink, COLORS.dusk);
+  constructor(){ super('TitleScene'); }
+  create(){
+    fillSky(this,800,450,COLORS.ink,COLORS.dusk);
+    makeDomeTexture(this,'dome-title',COLORS.turquoise,COLORS.turquoiseDark);
+    this.add.image(130,383,'dome-title').setScale(1.5).setOrigin(0.5,0.9).setTint(0x0b0714).setAlpha(0.5);
+    this.add.image(670,393,'dome-title').setScale(1.15).setOrigin(0.5,0.9).setTint(0x0b0714).setAlpha(0.5);
 
-    makeDomeTexture(this, 'dome-title', COLORS.turquoise, COLORS.turquoiseDark);
-    this.add.image(130, 380, 'dome-title').setScale(1.5).setTint(0x0b0714).setAlpha(0.5);
-    this.add.image(670, 390, 'dome-title').setScale(1.15).setTint(0x0b0714).setAlpha(0.5);
+    this.add.text(400,155,'THE FLYING CARPET',{fontFamily:'Georgia, serif',fontSize:'38px',color:'#E8A33D',fontStyle:'bold'}).setOrigin(0.5);
+    this.add.text(400,198,'One Night, Five Debts',{fontFamily:'Georgia, serif',fontSize:'17px',color:'#EFE3C8',fontStyle:'italic'}).setOrigin(0.5);
+    this.add.text(400,400,'Preview build v2 \u2014 Chapters 1-3',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'12px',color:'#8A7A9A'}).setOrigin(0.5);
 
-    this.add.text(400, 155, 'THE FLYING CARPET', {
-      fontFamily:'Georgia, serif', fontSize:'38px', color:'#E8A33D', fontStyle:'bold'
-    }).setOrigin(0.5);
-    this.add.text(400, 198, 'One Night, Five Debts', {
-      fontFamily:'Georgia, serif', fontSize:'17px', color:'#EFE3C8', fontStyle:'italic'
-    }).setOrigin(0.5);
-    this.add.text(400, 400, 'Preview build \u2014 Chapters 1-3', {
-      fontFamily:'Trebuchet MS, sans-serif', fontSize:'12px', color:'#8A7A9A'
-    }).setOrigin(0.5);
-
-    const prompt = this.add.text(400, 330, 'Tap, click, or press Space to begin', {
-      fontFamily:'Trebuchet MS, sans-serif', fontSize:'16px', color:'#EFE3C8'
-    }).setOrigin(0.5);
+    const prompt = this.add.text(400,330,'Tap, click, or press Space to begin',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'16px',color:'#EFE3C8'}).setOrigin(0.5);
     this.tweens.add({ targets:prompt, alpha:0.25, duration:800, yoyo:true, repeat:-1 });
 
     this.input.once('pointerdown', () => this.begin());
     this.input.keyboard.once('keydown-SPACE', () => this.begin());
   }
-  begin() {
-    Dialogue.init();
-    Touch.init();
-    this.scene.start('IntroScene');
-  }
+  begin(){ Dialogue.init(); Touch.init(); this.scene.start('IntroScene'); }
 }
 
 /* =========================================================================
-   INTRO SCENE — the flash-forward hook (hall of skulls, the empty hook)
+   INTRO SCENE — the flash-forward hook
    ========================================================================= */
 class IntroScene extends Phaser.Scene {
-  constructor() { super('IntroScene'); }
-  create() {
-    const bg = this.add.graphics();
-    bg.fillStyle(COLORS.ink, 1);
-    bg.fillRect(0, 0, 800, 450);
-    bg.fillStyle(COLORS.terracottaDark, 0.3);
-    bg.fillEllipse(400, 430, 700, 60);
+  constructor(){ super('IntroScene'); }
+  create(){
+    fillSky(this,800,450,COLORS.ink,COLORS.ink);
+    const glow=this.add.graphics(); glow.fillStyle(COLORS.terracottaDark,0.3); glow.fillEllipse(400,430,700,60);
 
-    const hookY = 150, count = 7, emptyIndex = 3;
-    for (let i=0;i<count;i++) {
-      const x = 130 + i*90;
-      const hookG = this.add.graphics();
-      hookG.lineStyle(3, 0x5a4a6a, 1);
-      hookG.beginPath();
-      hookG.arc(x, hookY, 10, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false);
-      hookG.strokePath();
-
-      if (i === emptyIndex) {
-        const hl = this.add.graphics();
-        hl.fillStyle(COLORS.saffron, 0.18);
-        hl.fillCircle(x, hookY+34, 20);
+    makeSkullTexture(this,'skull-tex');
+    const hookY=150, count=7, emptyIndex=3;
+    for (let i=0;i<count;i++){
+      const x=130+i*90;
+      const hookG=this.add.graphics();
+      hookG.lineStyle(3,0x5a4a6a,1);
+      hookG.beginPath(); hookG.arc(x,hookY,10,Phaser.Math.DegToRad(200),Phaser.Math.DegToRad(340),false); hookG.strokePath();
+      if (i===emptyIndex){
+        const hl=this.add.graphics(); hl.fillStyle(COLORS.saffron,0.18); hl.fillCircle(x,hookY+38,22);
       } else {
-        const s = this.add.graphics();
-        s.fillStyle(0xC9BFAA, 0.85);
-        s.fillCircle(x, hookY+34, 15);
-        s.fillTriangle(x-5, hookY+40, x+5, hookY+40, x, hookY+50);
-        s.fillStyle(COLORS.ink, 1);
-        s.fillCircle(x-5, hookY+30, 3);
-        s.fillCircle(x+5, hookY+30, 3);
+        this.add.image(x,hookY+38,'skull-tex');
       }
     }
 
-    makePersonTexture(this, 'sanobar-tex', COLORS.silhouette, COLORS.silhouette);
-    this.add.image(400, 345, 'sanobar-tex').setScale(3.4).setTint(0x0b0714);
+    makeTorchFlame(this,'torch-flame-intro');
+    [90,710].forEach((x)=>{
+      this.add.rectangle(x,320,6,60,0x2a1f1a);
+      const flame=this.add.image(x,282,'torch-flame-intro');
+      this.tweens.add({ targets:flame, scaleY:{from:0.85,to:1.2}, scaleX:{from:1.15,to:0.85}, duration:220, yoyo:true, repeat:-1 });
+    });
+
+    makeCharacterTexture(this,'sanobar-tex',{skin:COLORS.skin1,robe:COLORS.crimson,accent:COLORS.gold,headwear:'crown',headwearColor:0x2a1f1a,beard:true,expression:'stern'});
+    this.add.image(400,410,'sanobar-tex').setScale(2.4).setOrigin(0.5,1).setTint(0x0b0714).setAlpha(0.92);
 
     this.time.delayedCall(500, () => {
       Dialogue.show([
-        { speaker:'King Sanobar', text:"You have come to ask about the woman in the iron cage." },
+        { speaker:'King Sanobar', text:"You've come to ask about the woman in the iron cage." },
         { speaker:'King Sanobar', text:"Every man who has asked me that question is in this hall. Look at the walls." },
         { speaker:'King Sanobar', text:"There is one hook left empty. Ask anyway, if you still want to." }
       ], () => this.toTitleCard());
     });
   }
-  toTitleCard() {
-    this.cameras.main.fadeOut(600, 0, 0, 0);
+  toTitleCard(){
+    this.cameras.main.fadeOut(600,0,0,0);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('MonthsEarlierScene'));
   }
 }
 
-/* =========================================================================
-   TITLE CARD — "Months earlier..."
-   ========================================================================= */
 class MonthsEarlierScene extends Phaser.Scene {
-  constructor() { super('MonthsEarlierScene'); }
-  create() {
+  constructor(){ super('MonthsEarlierScene'); }
+  create(){
     this.cameras.main.setBackgroundColor(COLORS.ink);
-    const txt = this.add.text(400, 225, 'Months earlier...', {
-      fontFamily:'Georgia, serif', fontSize:'30px', fontStyle:'italic', color:'#EFE3C8'
-    }).setOrigin(0.5).setAlpha(0);
-    this.tweens.add({
-      targets:txt, alpha:1, duration:900, yoyo:true, hold:900,
-      onComplete: () => this.scene.start('VillageScene')
-    });
+    const txt=this.add.text(400,225,'Months earlier...',{fontFamily:'Georgia, serif',fontSize:'30px',fontStyle:'italic',color:'#EFE3C8'}).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({ targets:txt, alpha:1, duration:900, yoyo:true, hold:900, onComplete:()=>this.scene.start('OpenAreaScene',{areaKey:'village'}) });
   }
 }
 
 /* =========================================================================
-   VILLAGE SCENE — simple walk; meet the old traveler; reach the palace
+   OPEN AREA SCENE — generic free-roam scene (4-directional movement,
+   depth-sorting, collidable scenery, NPC dialogue, exits). Used for both
+   the village/bazaar and the oven couple's location; future chapters just
+   add a new entry to AREAS.
    ========================================================================= */
-class VillageScene extends Phaser.Scene {
-  constructor() { super('VillageScene'); }
-  create() {
-    this.worldWidth = 1500;
+class OpenAreaScene extends Phaser.Scene {
+  constructor(){ super('OpenAreaScene'); }
+  init(data){ this.areaKey = data.areaKey; }
+  create(){
+    const area = AREAS[this.areaKey];
+    this.area = area;
+    this.sliceEnded = false;
     this.leaving = false;
-    this.physics.world.setBounds(0, 0, this.worldWidth, 450);
-    this.cameras.main.setBounds(0, 0, this.worldWidth, 450);
 
-    this.buildBackground();
+    this.physics.world.setBounds(0,0,area.width,area.height);
+    this.cameras.main.setBounds(0,0,area.width,area.height);
 
-    makePersonTexture(this, 'player-tex', COLORS.terracotta, 0xE0B88A);
-    this.player = this.physics.add.sprite(80, 340, 'player-tex').setScale(1.4);
+    this.buildGround(area);
+    this.buildDecor(area);
+
+    makeCharacterTexture(this,'player-tex',PLAYER_APPEARANCE);
+    this.player = this.physics.add.sprite(area.playerStart.x, area.playerStart.y, 'player-tex').setOrigin(0.5,1);
     this.player.setCollideWorldBounds(true);
-    this.player.body.setSize(20, 26).setOffset(4, 16);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
 
-    makePersonTexture(this, 'oldman-tex', 0x5a4a6a, 0xC9BFAA);
-    this.oldMan = this.physics.add.staticSprite(770, 340, 'oldman-tex').setScale(1.4);
-    this.oldManMet = false;
+    this.physics.add.collider(this.player, this.decorColliders);
 
-    this.gateZone = this.add.zone(this.worldWidth-50, 340, 40, 140);
-    this.physics.add.existing(this.gateZone, true);
+    area.npcs.forEach((npc,i) => {
+      const key = 'npc-'+this.areaKey+'-'+i;
+      makeCharacterTexture(this, key, npc.appearance);
+      const spr = this.physics.add.staticSprite(npc.x, npc.y, key).setOrigin(0.5,1);
+      spr.refreshBody();
+      spr.setDepth(npc.y);
+      spr.npcData = npc; spr.met = false;
+      this.physics.add.overlap(this.player, spr, () => this.talkTo(spr));
+      this.tweens.add({ targets:spr, scaleY:1.03, duration:1300+Math.random()*400, yoyo:true, repeat:-1, ease:'Sine.easeInOut' });
+    });
 
-    this.physics.add.overlap(this.player, this.oldMan, () => this.meetOldMan());
-    this.physics.add.overlap(this.player, this.gateZone, () => this.reachPalace());
+    (area.exits||[]).forEach((ex) => {
+      const z = this.add.zone(ex.x, ex.y, ex.w||70, ex.h||70);
+      this.physics.add.existing(z, true);
+      this.physics.add.overlap(this.player, z, () => this.tryExit(ex));
+    });
 
     this.cursors = this.input.keyboard.createCursorKeys();
-    this.keyA = this.input.keyboard.addKey('A');
-    this.keyD = this.input.keyboard.addKey('D');
+    this.wasd = this.input.keyboard.addKeys('W,A,S,D');
 
     Touch.show();
-    this.time.delayedCall(200, () => showHint("A childless couple were given a son, late in life. He grew sharp beyond his years."));
+    this.time.delayedCall(250, () => showHint(area.intro));
   }
-  update() {
-    if (Dialogue.active || this.leaving) { this.player.setVelocityX(0); return; }
-    const left = this.cursors.left.isDown || this.keyA.isDown || Touch.left;
-    const right = this.cursors.right.isDown || this.keyD.isDown || Touch.right;
-    const speed = 190;
-    if (left) { this.player.setVelocityX(-speed); this.player.setFlipX(true); }
-    else if (right) { this.player.setVelocityX(speed); this.player.setFlipX(false); }
-    else { this.player.setVelocityX(0); }
+  update(){
+    if (Dialogue.active || this.sliceEnded || this.leaving) { this.player.setVelocity(0,0); return; }
+    let vx=0, vy=0;
+    if (this.cursors.left.isDown || this.wasd.A.isDown || Touch.left) vx -= 1;
+    if (this.cursors.right.isDown || this.wasd.D.isDown || Touch.right) vx += 1;
+    if (this.cursors.up.isDown || this.wasd.W.isDown || Touch.up) vy -= 1;
+    if (this.cursors.down.isDown || this.wasd.S.isDown || Touch.down) vy += 1;
+    if (vx!==0 && vy!==0) { vx*=0.7071; vy*=0.7071; }
+    const speed=170;
+    this.player.setVelocity(vx*speed, vy*speed);
+    if (vx<0) this.player.setFlipX(true); else if (vx>0) this.player.setFlipX(false);
+    this.player.setDepth(this.player.y);
   }
-  meetOldMan() {
-    if (this.oldManMet || Dialogue.active) return;
-    this.oldManMet = true;
-    Dialogue.show([
-      { speaker:'Old Traveler', text:"You have a good mind, boy. Take this." },
-      { speaker:'Old Traveler', text:"Sit on it and speak, and it will carry you anywhere in an eyeblink. Fold it and speak differently, and it hides itself in your pocket." },
-      { speaker:'Old Traveler', text:"One more thing \u2014 when it comes time to marry, ask for the King's daughter. No one else. Whatever they offer you instead, refuse it." }
-    ], () => showHint("Reach the palace at the edge of town."));
+  buildGround(area){
+    const g=this.add.graphics();
+    g.fillGradientStyle(area.skyTop,area.skyTop,area.groundColor,area.groundColor,1);
+    g.fillRect(0,0,area.width,area.height);
+    g.fillStyle(COLORS.outline,0.06);
+    for (let y=40; y<area.height; y+=70){
+      for (let x=(Math.round(y/70)%2===0?0:35); x<area.width; x+=70){
+        g.fillTriangle(x,y-5,x+5,y,x,y+5);
+        g.fillTriangle(x+5,y,x+10,y-5,x+10,y+5);
+      }
+    }
   }
-  reachPalace() {
-    if (Dialogue.active || this.leaving) return;
+  buildDecor(area){
+    this.decorColliders = this.physics.add.staticGroup();
+    area.structures.forEach((s) => {
+      const texKey = 'struct-'+s.type+(s.variant||'');
+      if (s.type==='house') makeBuildingTexture(this,texKey,'house');
+      else if (s.type==='stall') makeBuildingTexture(this,texKey,'stall');
+      else if (s.type==='mosque') makeBuildingTexture(this,texKey,'mosque');
+      else if (s.type==='tree') makeTreeTexture(this,texKey);
+      else if (s.type==='rock') makeRockTexture(this,texKey);
+      else if (s.type==='well') makeWellTexture(this,texKey);
+      else if (s.type==='gate') makeGateTexture(this,texKey);
+
+      this.add.image(s.x, s.y, texKey).setOrigin(0.5,1).setDepth(s.y);
+
+      if (s.type==='well'){
+        const glowDot=this.add.ellipse(s.x, s.y-11, 20, 8, COLORS.water, 0.5).setDepth(s.y+1);
+        this.tweens.add({ targets:glowDot, alpha:0.15, duration:1300, yoyo:true, repeat:-1 });
+      }
+
+      if (s.collide){
+        const fw=s.footW||40, fh=s.footH||18;
+        const fz=this.add.zone(s.x, s.y - fh/2, fw, fh);
+        this.physics.add.existing(fz, true);
+        this.decorColliders.add(fz);
+      }
+    });
+  }
+  talkTo(spr){
+    if (Dialogue.active || this.sliceEnded || spr.met) return;
+    const npc = spr.npcData;
+    spr.met = true;
+    if (npc.isTarget){
+      Dialogue.show(npc.dialogue, () => {
+        if (npc.flag) GameState.set(npc.flag, true);
+        if (npc.onComplete) npc.onComplete(this);
+      });
+    } else {
+      Dialogue.show([{ speaker:'Villager', text:npc.hint }]);
+    }
+  }
+  tryExit(ex){
+    if (Dialogue.active || this.sliceEnded || this.leaving) return;
+    if (ex.requiresFlag && !GameState.get(ex.requiresFlag)) { showHint(ex.lockedHint || "Not yet."); return; }
     this.leaving = true;
     Touch.hide();
-    this.cameras.main.fadeOut(400, 0, 0, 0);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('PalaceScene'));
+    this.cameras.main.fadeOut(400,0,0,0);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(ex.toScene, ex.toData||{}));
   }
-  buildBackground() {
-    const g = this.add.graphics();
-    g.fillGradientStyle(COLORS.saffron, COLORS.saffron, COLORS.dusk, COLORS.dusk, 1);
-    g.fillRect(0, 0, this.worldWidth, 450);
-    g.setScrollFactor(0.3);
-
-    const ground = this.add.graphics();
-    ground.fillStyle(COLORS.terracotta, 1);
-    ground.fillRect(0, 380, this.worldWidth, 70);
-
-    for (let i=0;i<6;i++) {
-      const hut = this.add.graphics();
-      const x = 220 + i*230;
-      hut.fillStyle(COLORS.terracottaDark, 1);
-      hut.fillRect(x, 322, 85, 65);
-      hut.fillTriangle(x-8, 322, x+93, 322, x+42.5, 288);
-      hut.setScrollFactor(0.75);
-    }
-
-    const gate = this.add.graphics();
-    gate.fillStyle(COLORS.silhouette, 0.8);
-    gate.fillRect(this.worldWidth-70, 200, 20, 180);
-    gate.fillRect(this.worldWidth-25, 200, 20, 180);
-    gate.fillEllipse(this.worldWidth-47, 200, 70, 40);
+  endOfSlice(){
+    this.sliceEnded = true;
+    Touch.hide();
+    const sx=this.cameras.main.scrollX, sy=this.cameras.main.scrollY;
+    this.add.rectangle(sx+400,sy+225,800,450,0x0b0714,0.88).setScrollFactor(0).setDepth(5000);
+    this.add.text(sx+400,sy+180,'You need to find the Gravekeeper.',{fontFamily:'Georgia, serif',fontSize:'21px',color:'#EFE3C8'}).setOrigin(0.5).setScrollFactor(0).setDepth(5001);
+    this.add.text(sx+400,sy+226,'\u2014 End of this preview build \u2014',{fontFamily:'Georgia, serif',fontSize:'15px',fontStyle:'italic',color:'#E8A33D'}).setOrigin(0.5).setScrollFactor(0).setDepth(5001);
+    this.add.text(sx+400,sy+262,'More chapters are on the way.',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'13px',color:'#EFE3C8'}).setOrigin(0.5).setScrollFactor(0).setDepth(5001);
   }
 }
 
@@ -471,350 +767,326 @@ class VillageScene extends Phaser.Scene {
    PALACE SCENE — petition, the king's fury, the minister's bargain
    ========================================================================= */
 class PalaceScene extends Phaser.Scene {
-  constructor() { super('PalaceScene'); }
-  create() {
+  constructor(){ super('PalaceScene'); }
+  create(){
     Touch.hide();
     this.buildBackground();
     this.time.delayedCall(400, () => this.beginScene());
   }
-  buildBackground() {
-    const g = this.add.graphics();
-    g.fillGradientStyle(COLORS.dusk, COLORS.dusk, COLORS.ink, COLORS.ink, 1);
-    g.fillRect(0, 0, 800, 450);
+  buildBackground(){
+    fillSky(this,800,450,COLORS.dusk,COLORS.ink);
 
-    const floor = this.add.graphics();
-    floor.fillStyle(COLORS.terracottaDark, 1);
-    floor.fillRect(0, 380, 800, 70);
+    const floor=this.add.graphics();
+    for (let x=0;x<800;x+=40){ floor.fillStyle((x/40)%2===0?COLORS.terracotta:COLORS.terracottaDark,1); floor.fillRect(x,370,40,80); }
 
-    const arch = this.add.graphics();
-    arch.fillStyle(COLORS.terracotta, 1);
-    arch.fillRect(280, 120, 240, 270);
-    arch.fillStyle(COLORS.saffron, 1);
-    arch.fillEllipse(400, 150, 220, 90);
-    arch.fillStyle(COLORS.dusk, 1);
-    arch.fillEllipse(400, 165, 178, 78);
+    [90,710].forEach((x)=>{
+      const col=this.add.graphics();
+      col.fillStyle(COLORS.outline,1); col.fillRect(x-14,140,28,240);
+      col.fillStyle(COLORS.terracotta,1); col.fillRect(x-12,140,24,236);
+      col.fillStyle(COLORS.gold,1); col.fillRect(x-12,150,24,4); col.fillRect(x-12,360,24,4);
+    });
 
-    makeDomeTexture(this, 'dome-palace', COLORS.turquoise, COLORS.turquoiseDark);
-    this.add.image(150, 90, 'dome-palace').setScale(1.6);
-    this.add.image(650, 90, 'dome-palace').setScale(1.6);
-    makeMinaretTexture(this, 'minaret-palace');
-    this.add.image(80, 250, 'minaret-palace').setScale(1.1);
-    this.add.image(720, 250, 'minaret-palace').setScale(1.1);
+    const arch=this.add.graphics();
+    arch.fillStyle(COLORS.outline,1); arch.fillRect(276,116,248,270);
+    arch.fillStyle(COLORS.terracotta,1); arch.fillRect(280,120,240,266);
+    arch.fillStyle(COLORS.outline,1); arch.fillEllipse(400,150,226,94);
+    arch.fillStyle(COLORS.turquoise,1); arch.fillEllipse(400,155,214,84);
+    arch.fillStyle(COLORS.dusk,1); arch.fillEllipse(400,168,170,72);
+    for (let i=0;i<9;i++){ arch.fillStyle(COLORS.gold,0.8); const ax=310+i*22; arch.fillTriangle(ax,252,ax+11,239,ax+22,252); }
 
-    makePersonTexture(this, 'guard-tex', 0x3a2f52, 0xC9BFAA);
-    this.add.image(320, 350, 'guard-tex').setScale(1.6);
-    this.add.image(480, 350, 'guard-tex').setScale(1.6);
+    makeDomeTexture(this,'dome-palace',COLORS.turquoise,COLORS.turquoiseDark);
+    [[140,83,1.7],[660,83,1.7],[400,58,2.1]].forEach((d)=>{ this.add.image(d[0],d[1],'dome-palace').setScale(d[2]).setOrigin(0.5,0.9); });
+    makeMinaretTexture(this,'minaret-palace');
+    this.add.image(60,260,'minaret-palace').setScale(1.15).setOrigin(0.5,1);
+    this.add.image(740,260,'minaret-palace').setScale(1.15).setOrigin(0.5,1);
 
-    makePersonTexture(this, 'king-tex', COLORS.saffron, 0xC9BFAA);
-    this.king = this.add.image(400, 320, 'king-tex').setScale(2.0);
+    makeBannerTexture(this,'banner');
+    [180,620].forEach((x)=>{
+      const b=this.add.image(x,190,'banner').setOrigin(0.5,0);
+      this.tweens.add({ targets:b, angle:4, duration:1600, yoyo:true, repeat:-1, ease:'Sine.easeInOut' });
+    });
 
-    makePersonTexture(this, 'minister-tex', COLORS.turquoise, 0xC9BFAA);
-    this.minister = this.add.image(600, 350, 'minister-tex').setScale(1.5).setAlpha(0);
+    makeTorchFlame(this,'torch-flame-palace');
+    [130,670].forEach((x)=>{
+      this.add.rectangle(x,330,6,50,0x2a1f1a);
+      const flame=this.add.image(x,300,'torch-flame-palace');
+      this.tweens.add({ targets:flame, scaleY:{from:0.85,to:1.15}, scaleX:{from:1.1,to:0.9}, duration:260, yoyo:true, repeat:-1 });
+    });
 
-    makePersonTexture(this, 'player-tex2', COLORS.terracotta, 0xE0B88A);
-    this.add.image(400, 400, 'player-tex2').setScale(1.5);
+    const throne=this.add.graphics();
+    throne.fillStyle(COLORS.outline,1); throne.fillRoundedRect(357,227,86,126,{tl:22,tr:22,bl:4,br:4});
+    throne.fillStyle(0x2a1f1a,1); throne.fillRoundedRect(360,230,80,120,{tl:20,tr:20,bl:4,br:4});
+    throne.fillStyle(COLORS.gold,0.7); throne.fillRoundedRect(368,238,64,10,4);
+
+    makeCharacterTexture(this,'guard-tex',{skin:COLORS.skin1,robe:0x3a2f52,accent:0x6b5a8a,headwear:'helmet',headwearColor:0x4a4058,expression:'neutral'});
+    [255,335,465,545].forEach((x)=>{
+      const gd=this.add.image(x,362,'guard-tex').setOrigin(0.5,1);
+      this.tweens.add({ targets:gd, scaleY:1.03, duration:1400+Math.random()*300, yoyo:true, repeat:-1 });
+    });
+
+    makeCharacterTexture(this,'king-tex',{skin:COLORS.skin1,robe:COLORS.crimson,accent:COLORS.gold,headwear:'crown',headwearColor:0x2a1f1a,beard:true,expression:'stern'});
+    this.king=this.add.image(400,346,'king-tex').setScale(1.35).setOrigin(0.5,1);
+
+    makeCharacterTexture(this,'minister-tex',{skin:COLORS.skin2,robe:COLORS.turquoiseDark,accent:COLORS.gold,headwear:'turban',headwearColor:COLORS.turquoise,beard:true,expression:'neutral'});
+    this.minister=this.add.image(610,376,'minister-tex').setOrigin(0.5,1).setAlpha(0);
+
+    makeCharacterTexture(this,'player-tex2',PLAYER_APPEARANCE);
+    this.add.image(400,412,'player-tex2').setOrigin(0.5,1);
   }
-  beginScene() {
+  beginScene(){
     Dialogue.show([
       { speaker:'Guard', text:"State your business, or turn back." },
-      { speaker:'You', text:"I have come to ask the King for his daughter's hand." },
-      { speaker:'Guard', text:"...You will tell him that yourself. Inside." }
+      { speaker:'You', text:"I've come to ask the King for his daughter's hand." },
+      { speaker:'Guard', text:"...You'll tell him that yourself. Inside." }
     ], () => this.kingScene());
   }
-  kingScene() {
+  kingScene(){
     Dialogue.show([
       { speaker:'The King', text:"A commoner. Asking for MY daughter." },
       { speaker:'The King', text:"Take him out and cut off his head." }
     ], () => this.ministerIntervenes());
   }
-  ministerIntervenes() {
+  ministerIntervenes(){
     this.tweens.add({ targets:this.minister, alpha:1, duration:400 });
     Dialogue.show([
       { speaker:'Minister', text:"Wait, Majesty. A moment first." },
-      { speaker:'Minister', text:"For ten years I have had nothing but riddles out of King Sanobar's country. A saddler who breaks what he builds. A baker who feeds a river. A gravekeeper who will not stop weeping. A couple living inside a kiln." },
-      { speaker:'Minister', text:"I have never had a way to ask. This one claims he can travel anywhere in an eyeblink." },
-      { speaker:'Minister', text:"Go and make sense of the couple in the kiln \u2014 and whatever that unravels into. Come back with the truth, and she is yours." },
+      { speaker:'Minister', text:"For ten years I've had nothing but riddles out of King Sanobar's country. A saddler who breaks what he builds. A baker who feeds a river. A gravekeeper who won't stop weeping. A couple living inside a kiln." },
+      { speaker:'Minister', text:"I've never had a way to ask. This one claims he can travel anywhere in an eyeblink." },
+      { speaker:'Minister', text:"Go and make sense of the couple in the kiln \u2014 and whatever that unravels into. Come back with the truth, and she's yours." },
       { speaker:'The King', text:"...Fine. Just get him out of my sight, one way or another." }
     ], () => this.carpetGiven());
   }
-  carpetGiven() {
-    makeCarpetTexture(this, 'carpet-small');
-    const carpet = this.add.image(400, 410, 'carpet-small').setScale(2).setAlpha(0);
-    this.tweens.add({ targets:carpet, alpha:1, y:390, duration:500 });
-    Dialogue.show([
-      { speaker:'Minister', text:"Say the words. Go." }
-    ], () => {
-      this.cameras.main.fadeOut(500, 0, 0, 0);
+  carpetGiven(){
+    makeCarpetTexture(this,'carpet-small',48,16);
+    const carpet=this.add.image(400,412,'carpet-small').setScale(1.6).setAlpha(0);
+    this.tweens.add({ targets:carpet, alpha:1, y:392, duration:500 });
+    Dialogue.show([{ speaker:'Minister', text:"Say the words. Go." }], () => {
+      this.cameras.main.fadeOut(500,0,0,0);
       this.cameras.main.once('camerafadeoutcomplete', () => {
-        this.scene.start('CarpetScene', {
-          nextScene:'LocationScene',
-          nextSceneData:{ locationKey:'ovenCouple' },
-          distance:2400
-        });
+        this.scene.start('CarpetScene', { nextScene:'OpenAreaScene', nextSceneData:{areaKey:'ovenCouple'}, distance:2400 });
       });
     });
   }
 }
 
 /* =========================================================================
-   CARPET SCENE — the world-map mechanic: tap/space to rise, dodge obstacles
+   CARPET SCENE — the world-map mechanic.
+   Bug fixes vs. the previous build:
+   - background now genuinely scrolls (TileSprite layers, tilePositionX advances)
+   - the carpet's collision body matches its baked texture exactly (no manual
+     offset guesswork), so the obstacle collider actually fires
+   - explicit y-threshold checks end the run at both the ceiling and the
+     ground; nothing relies on collideWorldBounds silently clamping
    ========================================================================= */
 class CarpetScene extends Phaser.Scene {
-  constructor() { super('CarpetScene'); }
-  init(data) {
-    this.nextScene = data.nextScene || 'LocationScene';
+  constructor(){ super('CarpetScene'); }
+  init(data){
+    this.nextScene = data.nextScene || 'OpenAreaScene';
     this.nextSceneData = data.nextSceneData || {};
     this.targetDistance = data.distance || 2400;
   }
-  create() {
-    this.distance = 0;
-    this.ended = false;
-    this.started = false;
-    this.spawnTimer = 1.0;
-
+  create(){
+    this.distance=0; this.ended=false; this.started=false; this.spawnTimer=1.0;
     Touch.hide();
-    this.physics.world.setBounds(0, 0, 800, 450);
-    this.buildBackground();
+    this.physics.world.setBounds(0,0,800,450);
 
-    makeCarpetTexture(this, 'carpet-fly');
-    this.carpet = this.physics.add.sprite(150, 225, 'carpet-fly').setScale(1.7);
+    fillSky(this,800,450,COLORS.saffron,COLORS.dusk);
+    makeMountainStripTexture(this,'mtn-strip');
+    this.mtnLayer=this.add.tileSprite(400,290,800,170,'mtn-strip');
+    makeCityStripTexture(this,'city-strip');
+    this.cityLayer=this.add.tileSprite(400,355,800,130,'city-strip').setAlpha(0.85);
+    makeGroundStripTexture(this,'ground-strip');
+    this.groundLayer=this.add.tileSprite(400,432,800,36,'ground-strip');
+    makeCloudStripTexture(this,'cloud-strip');
+    this.cloudLayer=this.add.tileSprite(400,42,800,64,'cloud-strip').setAlpha(0.55);
+
+    makeCarpetTexture(this,'carpet-fly',64,20);
+    this.carpet=this.physics.add.sprite(180,225,'carpet-fly');
     this.carpet.body.setAllowGravity(false);
-    this.carpet.body.setSize(46, 12).setOffset(6, 3);
-    this.carpet.setCollideWorldBounds(true);
 
-    this.obstacles = this.physics.add.group();
+    makeTasselTexture(this,'tassel');
+    this.tasselL=this.add.image(180-34,225,'tassel').setOrigin(1,0.2);
+    this.tasselR=this.add.image(180+34,225,'tassel').setOrigin(0,0.2).setFlipX(true);
+
+    this.obstacles=this.physics.add.group();
     this.physics.add.collider(this.carpet, this.obstacles, () => this.crash(), null, this);
 
-    this.distText = this.add.text(20, 16, '', {
-      fontFamily:'Trebuchet MS, sans-serif', fontSize:'15px', color:'#EFE3C8'
-    }).setScrollFactor(0);
-
-    this.startPrompt = this.add.text(400, 225, 'Tap, click, or press Space to rise', {
-      fontFamily:'Georgia, serif', fontSize:'19px', color:'#EFE3C8'
-    }).setOrigin(0.5);
+    this.distText=this.add.text(20,16,'',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'15px',color:'#EFE3C8'}).setDepth(100);
+    this.startPrompt=this.add.text(400,225,'Tap, click, or press Space to rise',{fontFamily:'Georgia, serif',fontSize:'19px',color:'#EFE3C8'}).setOrigin(0.5).setDepth(100);
     this.tweens.add({ targets:this.startPrompt, alpha:0.3, duration:700, yoyo:true, repeat:-1 });
 
-    this.spaceKey = this.input.keyboard.addKey('SPACE');
+    this.spaceKey=this.input.keyboard.addKey('SPACE');
     this.input.on('pointerdown', () => this.flap());
   }
-  update(time, delta) {
+  update(time, delta){
     if (this.ended) return;
     if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) this.flap();
+
+    const dt=delta/1000;
+    this.cloudLayer.tilePositionX += 8*dt;
+    this.updateTassels(time);
+
     if (!this.started) return;
 
-    const dt = delta / 1000;
-    this.distance += 210 * dt;
-    this.distText.setText('Distance: ' + Math.min(Math.floor(this.distance), this.targetDistance) + ' / ' + this.targetDistance);
+    this.distance += 210*dt;
+    this.distText.setText('Distance: '+Math.min(Math.floor(this.distance),this.targetDistance)+' / '+this.targetDistance);
+
+    this.mtnLayer.tilePositionX += 20*dt;
+    this.cityLayer.tilePositionX += 55*dt;
+    this.groundLayer.tilePositionX += 190*dt;
 
     if (this.carpet.body.velocity.y < -260) this.carpet.body.velocity.y = -260;
+    this.carpet.angle += Math.sin(time/260) * 0.4;
+
+    if (this.carpet.y <= 42 || this.carpet.y >= 408) { this.crash(); return; }
 
     this.obstacles.getChildren().slice().forEach((o) => { if (o.x < -80) o.destroy(); });
 
     this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0) {
-      this.spawnObstacle();
-      this.spawnTimer = Phaser.Math.FloatBetween(1.35, 1.85);
-    }
+    if (this.spawnTimer <= 0) { this.spawnObstacle(); this.spawnTimer = Phaser.Math.FloatBetween(1.3,1.8); }
 
     if (this.distance >= this.targetDistance) this.succeed();
   }
-  flap() {
+  updateTassels(time){
+    this.tasselL.x=this.carpet.x-32; this.tasselL.y=this.carpet.y+2;
+    this.tasselR.x=this.carpet.x+32; this.tasselR.y=this.carpet.y+2;
+    this.tasselL.rotation=this.carpet.rotation*0.5+Math.sin(time/240)*0.15;
+    this.tasselR.rotation=this.carpet.rotation*0.5+Math.sin(time/240+1)*0.15;
+  }
+  flap(){
     if (this.ended) return;
-    if (!this.started) {
-      this.started = true;
-      this.startPrompt.setVisible(false);
+    if (!this.started){
+      this.started=true; this.startPrompt.setVisible(false);
       this.carpet.body.setAllowGravity(true);
       this.carpet.body.setGravityY(620);
-      this.carpet.body.setMaxVelocity(9999, 340);
+      this.carpet.body.setMaxVelocity(9999,340);
     }
     this.carpet.body.setVelocityY(-260);
-    this.carpet.setAngle(-12);
+    this.carpet.setAngle(-14);
     this.time.delayedCall(220, () => { if (!this.ended) this.carpet.setAngle(6); });
   }
-  spawnObstacle() {
-    const gapY = Phaser.Math.Between(110, 300);
-    const gapSize = 155;
-    const topH = Math.max(gapY - gapSize/2, 0);
-    const botH = Math.max(450 - (gapY + gapSize/2), 0);
-    const top = this.add.rectangle(830, 0, 46, topH, COLORS.terracottaDark).setOrigin(0, 0);
-    const bot = this.add.rectangle(830, gapY + gapSize/2, 46, botH, COLORS.terracottaDark).setOrigin(0, 0);
-    [top, bot].forEach((rect) => {
+  spawnObstacle(){
+    const gapY=Phaser.Math.Between(100,310), gapSize=150;
+    const topH=Math.max(gapY-gapSize/2,10), botH=Math.max(450-(gapY+gapSize/2),10);
+    const top=this.add.rectangle(830,0,48,topH,COLORS.terracotta).setOrigin(0,0).setStrokeStyle(3,COLORS.outline,0.85);
+    const bot=this.add.rectangle(830,gapY+gapSize/2,48,botH,COLORS.terracotta).setOrigin(0,0).setStrokeStyle(3,COLORS.outline,0.85);
+    [top,bot].forEach((rect)=>{
       this.physics.add.existing(rect);
+      this.obstacles.add(rect);
       rect.body.setAllowGravity(false);
       rect.body.setImmovable(true);
       rect.body.setVelocityX(-190);
-      this.obstacles.add(rect);
     });
   }
-  crash() {
+  crash(){
     if (this.ended) return;
-    this.ended = true;
-    this.carpet.body.setVelocity(0, 0);
+    this.ended=true;
+    this.carpet.body.setVelocity(0,0);
     this.physics.pause();
-    this.add.rectangle(400, 225, 800, 450, 0x000000, 0.5);
-    this.add.text(400, 205, 'The carpet dips low\u2014', {
-      fontFamily:'Georgia, serif', fontSize:'21px', color:'#EFE3C8'
-    }).setOrigin(0.5);
-    this.add.text(400, 245, 'Tap, click, or press Space to try again', {
-      fontFamily:'Trebuchet MS, sans-serif', fontSize:'15px', color:'#E8A33D'
-    }).setOrigin(0.5);
+    this.add.rectangle(400,225,800,450,0x000000,0.5).setDepth(90);
+    this.add.text(400,205,'The carpet dips low\u2014',{fontFamily:'Georgia, serif',fontSize:'21px',color:'#EFE3C8'}).setOrigin(0.5).setDepth(91);
+    this.add.text(400,245,'Tap, click, or press Space to try again',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'15px',color:'#E8A33D'}).setOrigin(0.5).setDepth(91);
     this.time.delayedCall(350, () => {
       this.input.once('pointerdown', () => this.scene.restart());
       this.input.keyboard.once('keydown-SPACE', () => this.scene.restart());
     });
   }
-  succeed() {
+  succeed(){
     if (this.ended) return;
-    this.ended = true;
-    this.cameras.main.fadeOut(500, 0, 0, 0);
+    this.ended=true;
+    this.cameras.main.fadeOut(500,0,0,0);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(this.nextScene, this.nextSceneData));
-  }
-  buildBackground() {
-    fillSky(this, 800, COLORS.saffron, COLORS.dusk);
-
-    const m = this.add.graphics();
-    m.fillStyle(COLORS.silhouette, 0.5);
-    m.fillTriangle(0, 340, 160, 220, 320, 340);
-    m.fillTriangle(220, 340, 420, 240, 600, 340);
-    m.fillTriangle(480, 340, 660, 250, 820, 340);
-
-    makeDomeTexture(this, 'dome-carpet-bg', COLORS.turquoise, COLORS.turquoiseDark);
-    for (let i=0;i<4;i++) {
-      this.add.image(150 + i*220, 380, 'dome-carpet-bg').setScale(1.1).setTint(0x000000).setAlpha(0.55);
-    }
   }
 }
 
 /* =========================================================================
-   LOCATION DATA — add new keys here as future chapters are built; the
-   LocationScene class below is fully generic and reusable.
+   AREA DATA — add a new key here for each future chapter's location;
+   OpenAreaScene above is fully generic.
    ========================================================================= */
-const LOCATIONS = {
+const AREAS = {
+  village: {
+    width:1400, height:900,
+    skyTop:COLORS.saffron, groundColor:COLORS.sand,
+    intro:"The bazaar hums at the edge of the desert. Somewhere here, an old traveler is waiting.",
+    playerStart:{x:700,y:820},
+    structures:[
+      { type:'house', x:230,y:800, collide:true, footW:70, footH:24 },
+      { type:'stall', x:520,y:660, collide:true, footW:60, footH:20 },
+      { type:'stall', x:790,y:610, collide:true, footW:60, footH:20 },
+      { type:'stall', x:1000,y:700, collide:true, footW:60, footH:20 },
+      { type:'house', x:330,y:520, collide:true, footW:70, footH:24 },
+      { type:'house', x:1130,y:540, collide:true, footW:70, footH:24 },
+      { type:'mosque', x:930,y:360, collide:true, footW:70, footH:26 },
+      { type:'well', x:700,y:560, collide:true, footW:40, footH:20 },
+      { type:'tree', x:140,y:640, collide:true, footW:16, footH:10 },
+      { type:'tree', x:1280,y:640, collide:true, footW:16, footH:10 },
+      { type:'tree', x:470,y:300, collide:true, footW:16, footH:10 },
+      { type:'tree', x:1020,y:270, collide:true, footW:16, footH:10 },
+      { type:'rock', x:90,y:860, collide:false },
+      { type:'rock', x:1330,y:820, collide:false },
+      { type:'rock', x:210,y:280, collide:false },
+      { type:'gate', x:700,y:150, collide:false }
+    ],
+    npcs:[
+      { x:460,y:560, isTarget:true,
+        appearance:{skin:COLORS.skin2, robe:0x5a4a6a, accent:COLORS.gold, headwear:'turban', headwearColor:0xC9BFAA, beard:true, expression:'kind'},
+        dialogue:[
+          { speaker:'Old Traveler', text:"You have a good mind, boy. Take this." },
+          { speaker:'Old Traveler', text:"Sit on it and speak, and it will carry you anywhere in an eyeblink. Fold it and speak differently, and it hides itself in your pocket." },
+          { speaker:'Old Traveler', text:"One more thing \u2014 when it comes time to marry, ask for the King's daughter. No one else. Whatever they offer you instead, refuse it." }
+        ],
+        flag:'carpet-given',
+        onComplete:(scene)=>{ showHint("The road to the palace lies north, through the gate."); }
+      },
+      { x:560,y:700, appearance:{skin:COLORS.skin1, robe:0x6b7a4a, accent:COLORS.terracotta, headwear:'cap', headwearColor:0x4a3a2a, expression:'neutral'}, hint:"Fresh melons, sweetest in the province!" },
+      { x:820,y:650, appearance:{skin:COLORS.skin2, robe:0x8a5a6a, accent:COLORS.gold, headwear:'cap', headwearColor:0x5a3a3a, expression:'kind'}, hint:"Looking for someone? Try the well \u2014 everyone passes the well." },
+      { x:1010,y:640, appearance:{skin:COLORS.skin1, robe:0x4a6a7a, accent:COLORS.saffron, headwear:'turban', headwearColor:0x3a5a6a, expression:'neutral'}, hint:"Careful in the bazaar after dark. Not everyone here is a merchant." },
+      { x:380,y:660, appearance:{skin:COLORS.skin2, robe:0x7a5a3a, accent:COLORS.turquoise, headwear:'cap', headwearColor:0x5a4a2a, expression:'neutral'}, hint:"Rugs, brassware, good rope \u2014 come, look, no charge for looking." },
+      { x:790,y:460, appearance:{skin:COLORS.skin1, robe:0x5a3a6a, accent:COLORS.gold, headwear:'turban', headwearColor:0x8a5a6a, expression:'kind'}, hint:"The mosque bell rings at dusk. You'll hear it from anywhere in town." },
+      { x:1080,y:430, appearance:{skin:COLORS.skin2, robe:0x3a5a4a, accent:COLORS.saffron, headwear:'cap', headwearColor:0x2a3a2a, expression:'neutral'}, hint:"Strange lights over the desert last night. Probably nothing." },
+      { x:620,y:780, appearance:{skin:COLORS.skin1, robe:0x6a4a5a, accent:COLORS.turquoise, headwear:'turban', headwearColor:0x4a3a4a, expression:'neutral'}, hint:"You've got the look of someone about to do something foolish." }
+    ],
+    exits:[
+      /* Direct-to-palace for now. The illustrated route-map scene slots in
+         right here as its own build step. */
+      { x:700,y:130, w:90,h:60, toScene:'PalaceScene', toData:{}, requiresFlag:'carpet-given', lockedHint:"Find the old traveler first." }
+    ]
+  },
   ovenCouple: {
-    intro: "A collapsed kiln stands at the village edge. Someone here shares one robe between two people.",
-    skyTop: COLORS.saffron, skyBottom: COLORS.dusk,
-    worldWidth: 1700,
-    npcs: [
-      { x:240, color:0x6a5a4a, hint:"The couple who share one robe? Down past the well, poor souls." },
-      { x:480, color:0x5a6a4a, hint:"I don't get involved with them. Best keep walking." },
-      { x:760, color:0x4a5a6a, hint:"They keep to themselves. Why do you ask about them?" },
-      { x:1040, color:0x6a4a5a, hint:"Strange people. They never leave that old kiln together." },
-      {
-        x:1400, isTarget:true, color:0x9a9a9a,
-        dialogue: [
+    width:1200, height:700,
+    skyTop:COLORS.dusk, groundColor:0x8a6a55,
+    intro:"A collapsed kiln stands at the village edge. Someone here shares one robe between two people.",
+    playerStart:{x:90,y:600},
+    structures:[
+      { type:'house', x:260,y:560, collide:true, footW:70, footH:24 },
+      { type:'house', x:560,y:500, collide:true, footW:70, footH:24 },
+      { type:'tree', x:180,y:380, collide:true, footW:16, footH:10 },
+      { type:'tree', x:640,y:280, collide:true, footW:16, footH:10 },
+      { type:'rock', x:420,y:640, collide:false },
+      { type:'rock', x:900,y:320, collide:false },
+      { type:'well', x:480,y:620, collide:true, footW:40, footH:20 }
+    ],
+    npcs:[
+      { x:300,y:560, appearance:{skin:COLORS.skin1, robe:0x6a5a4a, accent:COLORS.terracotta, headwear:'cap', headwearColor:0x4a3a2a, expression:'neutral'}, hint:"The couple who share one robe? Down past the well, poor souls." },
+      { x:560,y:470, appearance:{skin:COLORS.skin2, robe:0x5a6a4a, accent:COLORS.saffron, headwear:'cap', headwearColor:0x3a4a2a, expression:'neutral'}, hint:"I don't get involved with them. Best keep walking." },
+      { x:820,y:560, appearance:{skin:COLORS.skin1, robe:0x4a5a6a, accent:COLORS.gold, headwear:'turban', headwearColor:0x3a4a5a, expression:'neutral'}, hint:"They keep to themselves. Why do you ask about them?" },
+      { x:1000,y:480, appearance:{skin:COLORS.skin2, robe:0x6a4a5a, accent:COLORS.turquoise, headwear:'cap', headwearColor:0x4a3a3a, expression:'neutral'}, hint:"Strange people. They never leave that old kiln together." },
+      { x:1080,y:420, isTarget:true,
+        appearance:{skin:COLORS.skin1, robe:0x9a9a9a, accent:COLORS.parchment, headwear:'none', expression:'neutral'},
+        dialogue:[
           { speaker:'Old Man', text:"There's nothing here for you, traveler. Move on." },
           { speaker:'You', text:"I mean you no harm. I only want to understand \u2014 why live like this?" },
           { speaker:'Old Man', text:"...There's a gravekeeper somewhere. Weeps without stopping, they say." },
           { speaker:'Old Man', text:"Twenty years we've heard scraps that he might know what became of someone we lost. We've never dared go ask ourselves." },
           { speaker:'Old Man', text:"Bring him to speak with you first. Then maybe I'll have something to tell you." }
         ],
-        flag:'gravekeeper-needed'
+        flag:'gravekeeper-needed',
+        onComplete:(scene)=>{ scene.endOfSlice(); }
       }
-    ]
+    ],
+    exits:[]
   }
 };
-
-/* =========================================================================
-   LOCATION SCENE — generic exploration + find-the-NPC puzzle, driven by
-   whatever entry in LOCATIONS the scene is started with.
-   ========================================================================= */
-class LocationScene extends Phaser.Scene {
-  constructor() { super('LocationScene'); }
-  init(data) { this.locKey = data.locationKey; }
-  create() {
-    const loc = LOCATIONS[this.locKey];
-    this.loc = loc;
-    this.physics.world.setBounds(0, 0, loc.worldWidth, 450);
-    this.cameras.main.setBounds(0, 0, loc.worldWidth, 450);
-
-    this.buildBackground(loc);
-
-    makePersonTexture(this, 'player-tex3', COLORS.terracotta, 0xE0B88A);
-    this.player = this.physics.add.sprite(60, 340, 'player-tex3').setScale(1.4);
-    this.player.setCollideWorldBounds(true);
-    this.player.body.setSize(20, 26).setOffset(4, 16);
-    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-
-    loc.npcs.forEach((npc, i) => {
-      const key = 'npc-' + this.locKey + '-' + i;
-      makePersonTexture(this, key, npc.color, npc.isTarget ? 0xEFE3C8 : 0xC9BFAA);
-      const spr = this.physics.add.staticSprite(npc.x, 340, key).setScale(1.4);
-      spr.npcData = npc;
-      spr.met = false;
-      this.physics.add.overlap(this.player, spr, () => this.talkTo(spr));
-    });
-
-    this.cursors = this.input.keyboard.createCursorKeys();
-    this.keyA = this.input.keyboard.addKey('A');
-    this.keyD = this.input.keyboard.addKey('D');
-
-    Touch.show();
-    this.time.delayedCall(250, () => showHint(loc.intro));
-  }
-  update() {
-    if (Dialogue.active || this.sliceEnded) { this.player.setVelocityX(0); return; }
-    const left = this.cursors.left.isDown || this.keyA.isDown || Touch.left;
-    const right = this.cursors.right.isDown || this.keyD.isDown || Touch.right;
-    const speed = 190;
-    if (left) { this.player.setVelocityX(-speed); this.player.setFlipX(true); }
-    else if (right) { this.player.setVelocityX(speed); this.player.setFlipX(false); }
-    else { this.player.setVelocityX(0); }
-  }
-  talkTo(spr) {
-    if (Dialogue.active || this.sliceEnded) return;
-    const npc = spr.npcData;
-    if (npc.isTarget) {
-      Dialogue.show(npc.dialogue, () => {
-        if (npc.flag) GameState.set(npc.flag, true);
-        this.endOfSlice();
-      });
-    } else {
-      if (spr.met) return;
-      spr.met = true;
-      Dialogue.show([{ speaker:'Villager', text:npc.hint }]);
-    }
-  }
-  endOfSlice() {
-    this.sliceEnded = true;
-    Touch.hide();
-    const sx = this.cameras.main.scrollX;
-    this.add.rectangle(sx+400, 225, 800, 450, 0x0b0714, 0.88).setScrollFactor(0).setDepth(50);
-    this.add.text(sx+400, 180, 'You need to find the Gravekeeper.', {
-      fontFamily:'Georgia, serif', fontSize:'21px', color:'#EFE3C8'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
-    this.add.text(sx+400, 226, '\u2014 End of this preview build \u2014', {
-      fontFamily:'Georgia, serif', fontSize:'15px', fontStyle:'italic', color:'#E8A33D'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
-    this.add.text(sx+400, 262, 'More chapters are on the way.', {
-      fontFamily:'Trebuchet MS, sans-serif', fontSize:'13px', color:'#EFE3C8'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
-  }
-  buildBackground(loc) {
-    const g = this.add.graphics();
-    g.fillGradientStyle(loc.skyTop, loc.skyTop, loc.skyBottom, loc.skyBottom, 1);
-    g.fillRect(0, 0, loc.worldWidth, 450);
-    g.setScrollFactor(0.3);
-
-    const ground = this.add.graphics();
-    ground.fillStyle(COLORS.terracotta, 1);
-    ground.fillRect(0, 380, loc.worldWidth, 70);
-
-    const kiln = this.add.graphics();
-    kiln.fillStyle(COLORS.terracottaDark, 1);
-    kiln.fillRoundedRect(1340, 300, 120, 90, { tl:40, tr:40, br:6, bl:6 });
-    kiln.fillStyle(COLORS.ink, 0.6);
-    kiln.fillRoundedRect(1375, 340, 50, 50, { tl:20, tr:20, br:0, bl:0 });
-
-    for (let i=0;i<7;i++) {
-      const hut = this.add.graphics();
-      const x = 140 + i*220;
-      hut.fillStyle(COLORS.terracottaDark, 1);
-      hut.fillRect(x, 325, 78, 58);
-      hut.fillTriangle(x-6, 325, x+84, 325, x+39, 292);
-      hut.setScrollFactor(0.8);
-    }
-  }
-}
 
 /* =========================================================================
    BOOT
@@ -828,8 +1100,8 @@ window.addEventListener('load', () => {
     parent: 'game-container',
     backgroundColor: '#1B1330',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    physics: { default:'arcade', arcade:{ gravity:{ y:0 }, debug:false } },
-    scene: [TitleScene, IntroScene, MonthsEarlierScene, VillageScene, PalaceScene, CarpetScene, LocationScene]
+    physics: { default:'arcade', arcade:{ gravity:{y:0}, debug:false } },
+    scene: [TitleScene, IntroScene, MonthsEarlierScene, OpenAreaScene, PalaceScene, CarpetScene]
   });
 });
 </script>
