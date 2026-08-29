@@ -382,8 +382,8 @@ function makeMinaretTexture(scene, key) {
 }
 
 function makeBuildingTexture(scene, key, type) {
-  const W = type==='mosque'?90:(type==='stall'?70:80);
-  const H = type==='mosque'?110:(type==='stall'?55:75);
+  const W = type==='mosque'?90:(type==='stall'?70:(type==='bakery'?100:80));
+  const H = type==='mosque'?110:(type==='stall'?55:(type==='bakery'?85:75));
   return ensureTexture(scene, key, W, H, (g) => {
     if (type === 'stall') {
       g.fillStyle(COLORS.outline,1); g.fillRect(1,H*0.1-2,W-2,H*0.24+3);
@@ -408,6 +408,16 @@ function makeBuildingTexture(scene, key, type) {
       g.fillStyle(0x14101c,0.7); g.fillRoundedRect(W*0.4,H*0.68,W*0.2,H*0.32,{tl:10,tr:10,bl:0,br:0});
       g.lineStyle(1,COLORS.gold,0.5);
       for(let i=0;i<3;i++) g.strokeCircle(W*0.15+ i*W*0.23,H*0.5,4);
+    } else if (type === 'bakery') {
+      g.fillStyle(COLORS.outline,1); g.fillRect(1,H*0.35-2,W-2,H*0.65+4);
+      g.fillStyle(COLORS.terracottaDark,1); g.fillRect(2,H*0.36,W-4,H*0.64);
+      [0.2,0.5,0.8].forEach((f)=>{
+        g.fillStyle(COLORS.outline,1); g.fillRect(W*f-5,H*0.1,10,H*0.28);
+        g.fillStyle(COLORS.terracotta,1); g.fillRect(W*f-4,H*0.12,8,H*0.24);
+      });
+      g.fillStyle(0x14101c,0.7); g.fillRoundedRect(W*0.4,H*0.68,W*0.2,H*0.32,{tl:8,tr:8,bl:0,br:0});
+      g.fillStyle(0xE8742E,0.85); g.fillRect(W*0.14,H*0.5,W*0.16,W*0.13);
+      g.fillStyle(0xE8742E,0.85); g.fillRect(W*0.7,H*0.5,W*0.16,W*0.13);
     } else {
       g.fillStyle(COLORS.outline,1); g.fillRect(1,H*0.3-2,W-2,H*0.7+3);
       g.fillStyle(COLORS.terracottaDark,1); g.fillRect(2,H*0.32,W-4,H*0.68);
@@ -430,6 +440,31 @@ function makeTreeTexture(scene, key) {
     g.fillStyle(COLORS.outline,1); g.fillEllipse(W/2,H*0.3,W*0.92+3,H*0.64+3);
     g.fillStyle(COLORS.leaf,1); g.fillEllipse(W/2,H*0.3,W*0.92,H*0.64);
     g.fillStyle(COLORS.leafDark,0.5); g.fillEllipse(W*0.4,H*0.38,W*0.4,H*0.3);
+  });
+}
+
+function makeDeadTreeTexture(scene, key) {
+  const W=24,H=50;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(COLORS.outline,1); g.fillRect(W/2-4,H*0.35,8,H*0.65);
+    g.fillStyle(0x3a322a,1); g.fillRect(W/2-3,H*0.35,6,H*0.65);
+    g.lineStyle(3,0x3a322a,1);
+    g.beginPath(); g.moveTo(W/2,H*0.35); g.lineTo(W*0.18,H*0.08); g.strokePath();
+    g.beginPath(); g.moveTo(W/2,H*0.4); g.lineTo(W*0.88,H*0.14); g.strokePath();
+    g.beginPath(); g.moveTo(W/2,H*0.28); g.lineTo(W*0.56,H*0.02); g.strokePath();
+  });
+}
+
+function makeGraveTexture(scene, key) {
+  const W=28,H=36;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(0x000000,0.2); g.fillEllipse(W/2,H-3,20,6);
+    g.fillStyle(COLORS.outline,1); g.fillRoundedRect(W*0.15-2,H*0.15-2,W*0.7+4,H*0.75+4,{tl:14,tr:14,bl:3,br:3});
+    g.fillStyle(0x6a6560,1); g.fillRoundedRect(W*0.15,H*0.15,W*0.7,H*0.75,{tl:12,tr:12,bl:2,br:2});
+    g.fillStyle(0x545048,0.5); g.fillRect(W*0.15,H*0.55,W*0.7,H*0.35);
+    g.lineStyle(1.5,0x3a3630,0.6);
+    g.beginPath(); g.moveTo(W*0.35,H*0.3); g.lineTo(W*0.65,H*0.3); g.strokePath();
+    g.beginPath(); g.moveTo(W*0.5,H*0.22); g.lineTo(W*0.5,H*0.38); g.strokePath();
   });
 }
 
@@ -485,34 +520,47 @@ function makeTorchFlame(scene, key) {
 }
 
 /* ---- wide repeating strips used as TileSprite sources for real parallax scroll ---- */
-function makeMountainStripTexture(scene, key) {
+function makeMountainStripTexture(scene, key, silCol) {
+  if (silCol===undefined) silCol = COLORS.silhouette;
   const W=500,H=170;
   return ensureTexture(scene,key,W,H,(g)=>{
-    g.fillStyle(COLORS.silhouette,0.55);
+    g.fillStyle(silCol,0.55);
     g.fillTriangle(0,H,110,H*0.35,230,H);
     g.fillTriangle(150,H,300,H*0.15,420,H);
     g.fillTriangle(340,H,460,H*0.4,W+40,H);
   });
 }
-function makeCityStripTexture(scene, key) {
+function makeCityStripTexture(scene, key, silCol) {
+  if (silCol===undefined) silCol = COLORS.silhouette;
   const W=500,H=140;
   return ensureTexture(scene,key,W,H,(g)=>{
-    g.fillStyle(COLORS.silhouette,0.6);
+    g.fillStyle(silCol,0.6);
     [40,150,260,380].forEach((x)=>{ g.fillRect(x,H*0.45,26,H*0.55); g.fillEllipse(x+13,H*0.4,30,22); });
     [100,220,340,460].forEach((x)=>{ g.fillRect(x,H*0.55,12,H*0.45); g.fillTriangle(x-3,H*0.55,x+15,H*0.55,x+6,H*0.4); });
   });
 }
-function makeCloudStripTexture(scene, key) {
+function makeVillageStripTexture(scene, key, silCol) {
+  if (silCol===undefined) silCol = COLORS.silhouette;
+  const W=500,H=100;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.fillStyle(silCol,0.5);
+    [30,140,260,380,460].forEach((x)=>{ g.fillRect(x,H*0.55,30,H*0.45); g.fillTriangle(x-5,H*0.55,x+35,H*0.55,x+15,H*0.28); });
+    g.fillEllipse(95,H*0.92,120,26); g.fillEllipse(330,H*0.94,150,22);
+  });
+}
+function makeCloudStripTexture(scene, key, cloudCol) {
+  if (cloudCol===undefined) cloudCol = COLORS.cloudWhite;
   const W=500,H=70;
   return ensureTexture(scene,key,W,H,(g)=>{
-    g.fillStyle(COLORS.cloudWhite,0.65);
+    g.fillStyle(cloudCol,0.65);
     [60,220,380].forEach((x)=>{ g.fillEllipse(x,H*0.5,70,26); g.fillEllipse(x+30,H*0.42,44,20); g.fillEllipse(x-28,H*0.46,40,18); });
   });
 }
-function makeGroundStripTexture(scene, key) {
+function makeGroundStripTexture(scene, key, groundCol) {
+  if (groundCol===undefined) groundCol = COLORS.sand;
   const W=500,H=40;
   return ensureTexture(scene,key,W,H,(g)=>{
-    g.fillStyle(COLORS.sand,1); g.fillRect(0,0,W,H);
+    g.fillStyle(groundCol,1); g.fillRect(0,0,W,H);
     g.fillStyle(COLORS.terracottaDark,0.4);
     for(let i=0;i<12;i++) g.fillEllipse(i*44+20,H*0.3,30,6);
   });
@@ -547,6 +595,39 @@ function makeTasselTexture(scene, key) {
 }
 
 const PLAYER_APPEARANCE = { skin:COLORS.skin1, robe:COLORS.terracotta, accent:COLORS.saffron, headwear:'cap', headwearColor:0x6b4a35, expression:'neutral' };
+
+function lerpColor(c1, c2, t) {
+  t = Phaser.Math.Clamp(t, 0, 1);
+  const r1=(c1>>16)&0xff, g1=(c1>>8)&0xff, b1=c1&0xff;
+  const r2=(c2>>16)&0xff, g2=(c2>>8)&0xff, b2=c2&0xff;
+  const r=Math.round(r1+(r2-r1)*t), g=Math.round(g1+(g2-g1)*t), b=Math.round(b1+(b2-b1)*t);
+  return (r<<16)|(g<<8)|b;
+}
+
+function makeOvenTexture(scene, key) {
+  const W=140, H=170;
+  return ensureTexture(scene, key, W, H, (g) => {
+    g.fillStyle(COLORS.outline,1); g.fillRoundedRect(-2,-2,W+4,H*0.85+4,{tl:16,tr:16,bl:6,br:6});
+    g.fillStyle(COLORS.terracottaDark,1); g.fillRoundedRect(0,0,W,H*0.85,{tl:14,tr:14,bl:4,br:4});
+    g.fillStyle(0x0d0805,1); g.fillEllipse(W/2,H*0.62,W*0.5,H*0.5);
+    g.fillStyle(0xE8742E,0.9); g.fillEllipse(W/2,H*0.72,W*0.34,H*0.28);
+    g.fillStyle(0xF5B44A,0.9); g.fillEllipse(W/2,H*0.78,W*0.2,H*0.14);
+    g.fillStyle(COLORS.outline,1); g.fillRect(W*0.62,-30,22,34);
+    g.fillStyle(COLORS.terracotta,1); g.fillRect(W*0.63,-28,20,32);
+  });
+}
+
+function makeCartTexture(scene, key) {
+  const W=70, H=50;
+  return ensureTexture(scene, key, W, H, (g) => {
+    g.fillStyle(COLORS.outline,1); g.fillRoundedRect(2,10,W-4,H*0.5,4);
+    g.fillStyle(COLORS.terracotta,1); g.fillRoundedRect(4,12,W-8,H*0.46,3);
+    g.fillStyle(0xE8D9B0,1);
+    for (let i=0;i<3;i++) g.fillEllipse(14+i*20,18,14,9);
+    g.fillStyle(COLORS.outline,1); g.fillCircle(16,H-6,9); g.fillCircle(W-16,H-6,9);
+    g.fillStyle(0x3a322a,1); g.fillCircle(16,H-6,7); g.fillCircle(W-16,H-6,7);
+  });
+}
 
 /* =========================================================================
    TITLE SCENE
@@ -656,15 +737,17 @@ class OpenAreaScene extends Phaser.Scene {
 
     this.physics.add.collider(this.player, this.decorColliders);
 
+    this.npcSprites = [];
     area.npcs.forEach((npc,i) => {
       const key = 'npc-'+this.areaKey+'-'+i;
-      makeCharacterTexture(this, key, npc.appearance);
-      const spr = this.physics.add.staticSprite(npc.x, npc.y, key).setOrigin(0.5,1);
-      spr.refreshBody();
-      spr.setDepth(npc.y);
-      spr.npcData = npc; spr.met = false;
-      this.physics.add.overlap(this.player, spr, () => this.talkTo(spr));
-      this.tweens.add({ targets:spr, scaleY:1.03, duration:1300+Math.random()*400, yoyo:true, repeat:-1, ease:'Sine.easeInOut' });
+      if (npc.spriteType === 'grave') makeGraveTexture(this, key);
+      else makeCharacterTexture(this, key, npc.appearance);
+      const spr = this.add.image(npc.x, npc.y, key).setOrigin(0.5,1).setDepth(npc.y);
+      spr.npcData = npc; spr.playerInside = false;
+      if (npc.spriteType !== 'grave') {
+        this.tweens.add({ targets:spr, scaleY:1.03, duration:1300+Math.random()*400, yoyo:true, repeat:-1, ease:'Sine.easeInOut' });
+      }
+      this.npcSprites.push(spr);
     });
 
     (area.exits||[]).forEach((ex) => {
@@ -691,6 +774,15 @@ class OpenAreaScene extends Phaser.Scene {
     this.player.setVelocity(vx*speed, vy*speed);
     if (vx<0) this.player.setFlipX(true); else if (vx>0) this.player.setFlipX(false);
     this.player.setDepth(this.player.y);
+    this.checkProximity();
+  }
+  checkProximity(){
+    this.npcSprites.forEach((spr) => {
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, spr.x, spr.y);
+      const inside = d < 42;
+      if (inside && !spr.playerInside) this.talkTo(spr);
+      spr.playerInside = inside;
+    });
   }
   buildGround(area){
     const g=this.add.graphics();
@@ -711,7 +803,9 @@ class OpenAreaScene extends Phaser.Scene {
       if (s.type==='house') makeBuildingTexture(this,texKey,'house');
       else if (s.type==='stall') makeBuildingTexture(this,texKey,'stall');
       else if (s.type==='mosque') makeBuildingTexture(this,texKey,'mosque');
+      else if (s.type==='bakery') makeBuildingTexture(this,texKey,'bakery');
       else if (s.type==='tree') makeTreeTexture(this,texKey);
+      else if (s.type==='deadtree') makeDeadTreeTexture(this,texKey);
       else if (s.type==='rock') makeRockTexture(this,texKey);
       else if (s.type==='well') makeWellTexture(this,texKey);
       else if (s.type==='gate') makeGateTexture(this,texKey);
@@ -732,17 +826,19 @@ class OpenAreaScene extends Phaser.Scene {
     });
   }
   talkTo(spr){
-    if (Dialogue.active || this.sliceEnded || spr.met) return;
+    if (Dialogue.active || this.sliceEnded) return;
     const npc = spr.npcData;
-    spr.met = true;
-    if (npc.isTarget){
-      Dialogue.show(npc.dialogue, () => {
+    let lines;
+    if (typeof npc.getDialogue === 'function') lines = npc.getDialogue();
+    else if (npc.isTarget) lines = npc.dialogue;
+    else lines = [{ speaker:(npc.spriteType==='grave' ? '' : 'Villager'), text:npc.hint }];
+
+    Dialogue.show(lines, () => {
+      if (npc.isTarget || npc.getDialogue) {
         if (npc.flag) GameState.set(npc.flag, true);
         if (npc.onComplete) npc.onComplete(this);
-      });
-    } else {
-      Dialogue.show([{ speaker:'Villager', text:npc.hint }]);
-    }
+      }
+    });
   }
   tryExit(ex){
     if (Dialogue.active || this.sliceEnded || this.leaving) return;
@@ -752,12 +848,12 @@ class OpenAreaScene extends Phaser.Scene {
     this.cameras.main.fadeOut(400,0,0,0);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(ex.toScene, ex.toData||{}));
   }
-  endOfSlice(){
+  endOfSlice(nextNeeded){
     this.sliceEnded = true;
     Touch.hide();
     const sx=this.cameras.main.scrollX, sy=this.cameras.main.scrollY;
     this.add.rectangle(sx+400,sy+225,800,450,0x0b0714,0.88).setScrollFactor(0).setDepth(5000);
-    this.add.text(sx+400,sy+180,'You need to find the Gravekeeper.',{fontFamily:'Georgia, serif',fontSize:'21px',color:'#EFE3C8'}).setOrigin(0.5).setScrollFactor(0).setDepth(5001);
+    this.add.text(sx+400,sy+180,'You need to find the '+nextNeeded+'.',{fontFamily:'Georgia, serif',fontSize:'21px',color:'#EFE3C8'}).setOrigin(0.5).setScrollFactor(0).setDepth(5001);
     this.add.text(sx+400,sy+226,'\u2014 End of this preview build \u2014',{fontFamily:'Georgia, serif',fontSize:'15px',fontStyle:'italic',color:'#E8A33D'}).setOrigin(0.5).setScrollFactor(0).setDepth(5001);
     this.add.text(sx+400,sy+262,'More chapters are on the way.',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'13px',color:'#EFE3C8'}).setOrigin(0.5).setScrollFactor(0).setDepth(5001);
   }
@@ -870,35 +966,197 @@ class PalaceScene extends Phaser.Scene {
 }
 
 /* =========================================================================
-   CARPET SCENE — the world-map mechanic.
-   Bug fixes vs. the previous build:
-   - background now genuinely scrolls (TileSprite layers, tilePositionX advances)
-   - the carpet's collision body matches its baked texture exactly (no manual
-     offset guesswork), so the obstacle collider actually fires
-   - explicit y-threshold checks end the run at both the ceiling and the
-     ground; nothing relies on collideWorldBounds silently clamping
+   BAKERY SCENE — "keep the oven temperature right, move the loaves."
+   No fail state by design: straying out of the good zone just pauses baking
+   progress rather than punishing the player, matching the 'very easy' brief.
+   ========================================================================= */
+class BakeryScene extends Phaser.Scene {
+  constructor(){ super('BakeryScene'); }
+  init(data){
+    this.nextScene = data.nextScene || 'OpenAreaScene';
+    this.nextSceneData = data.nextSceneData || {};
+  }
+  create(){
+    Touch.hide();
+    this.temp = 55;
+    this.zoneMin = 40; this.zoneMax = 70;
+    this.batchesComplete = 0;
+    this.batchTarget = 5;
+    this.done = false;
+
+    this.buildBackground();
+    this.buildGauge();
+    this.buildLoaves();
+    this.buildStokeButton();
+
+    this.progressText = this.add.text(400,40,'',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'16px',color:'#EFE3C8'}).setOrigin(0.5);
+    this.updateProgressText();
+
+    this.time.delayedCall(300, () => {
+      Dialogue.show([{ speaker:'', text:"The ovens run from dawn to noon. Keep the fire tended, and see it through." }]);
+    });
+  }
+  buildBackground(){
+    fillSky(this,800,450,0x3a2418,0x1a1008);
+    const floor=this.add.graphics(); floor.fillStyle(COLORS.terracottaDark,1); floor.fillRect(0,360,800,90);
+    makeOvenTexture(this,'oven-tex');
+    this.add.image(400,340,'oven-tex').setOrigin(0.5,1).setScale(1.5);
+    this.add.rectangle(700,150,64,74,0x1a1008).setStrokeStyle(3,COLORS.outline,1);
+    makeCharacterTexture(this,'watcher-tex', PLAYER_APPEARANCE);
+    this.add.image(700,196,'watcher-tex').setOrigin(0.5,1).setScale(0.85);
+  }
+  buildGauge(){
+    const gx=60, gy=386, gw=680, gh=26;
+    this.gx=gx; this.gy=gy; this.gw=gw; this.gh=gh;
+    const bg=this.add.graphics();
+    bg.fillStyle(0x000000,0.4); bg.fillRoundedRect(gx-3,gy-3,gw+6,gh+6,8);
+    bg.fillStyle(0x2a2044,1); bg.fillRoundedRect(gx,gy,gw,gh,6);
+    const zoneX=gx+(this.zoneMin/100)*gw, zoneW=((this.zoneMax-this.zoneMin)/100)*gw;
+    bg.fillStyle(COLORS.turquoise,0.35); bg.fillRect(zoneX,gy,zoneW,gh);
+    this.add.text(gx,gy-20,'COLD',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'11px',color:'#8A7A9A'});
+    this.add.text(gx+gw-30,gy-20,'HOT',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'11px',color:'#8A7A9A'});
+    this.gaugeFillG=this.add.graphics();
+    this.drawGaugeFill();
+  }
+  drawGaugeFill(){
+    this.gaugeFillG.clear();
+    const pct=Phaser.Math.Clamp(this.temp,0,100)/100;
+    const inZone=this.temp>=this.zoneMin && this.temp<=this.zoneMax;
+    const color=inZone?COLORS.gold:(this.temp<this.zoneMin?0x6a8aa0:0xB3452E);
+    this.gaugeFillG.fillStyle(color,0.9);
+    this.gaugeFillG.fillRoundedRect(this.gx,this.gy,Math.max(this.gw*pct,4),this.gh,6);
+  }
+  buildStokeButton(){
+    const btn=this.add.rectangle(400,428,190,42,COLORS.terracotta).setStrokeStyle(3,COLORS.outline,0.9).setInteractive({useHandCursor:true});
+    this.add.text(400,428,'STOKE THE FIRE',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'14px',fontStyle:'bold',color:'#1B1330'}).setOrigin(0.5);
+    btn.on('pointerdown', () => {
+      if (this.done) return;
+      this.temp=Math.min(100,this.temp+18);
+      this.tweens.add({ targets:btn, scaleX:0.94, scaleY:0.94, duration:80, yoyo:true });
+    });
+  }
+  buildLoaves(){
+    this.loaves=[];
+    [260,400,540].forEach((x) => {
+      const img=this.add.ellipse(x,300,50,32,0xE8D9B0).setStrokeStyle(2,COLORS.outline,0.7).setInteractive({useHandCursor:true});
+      const label=this.add.text(x,300,'',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'10px',fontStyle:'bold',color:'#1B1330'}).setOrigin(0.5);
+      const loaf={ img, label, progress:0, state:'baking', pulseTween:null };
+      img.on('pointerdown', () => this.tapLoaf(loaf));
+      this.loaves.push(loaf);
+    });
+  }
+  tapLoaf(loaf){
+    if (this.done || loaf.state!=='done') return;
+    if (loaf.pulseTween) { loaf.pulseTween.stop(); loaf.pulseTween=null; }
+    loaf.img.setScale(1);
+    this.batchesComplete++;
+    this.updateProgressText();
+    loaf.state='baking'; loaf.progress=0;
+    loaf.img.setFillStyle(0xE8D9B0);
+    loaf.label.setText('');
+    this.tweens.add({ targets:loaf.img, scaleX:1.25, scaleY:1.25, duration:120, yoyo:true });
+    if (this.batchesComplete>=this.batchTarget) this.finish();
+  }
+  updateProgressText(){
+    this.progressText.setText('Loaves baked: '+this.batchesComplete+' / '+this.batchTarget);
+  }
+  update(time, delta){
+    if (this.done) return;
+    const dt=delta/1000;
+    this.temp=Math.max(0,this.temp-6*dt);
+    this.drawGaugeFill();
+
+    const inZone=this.temp>=this.zoneMin && this.temp<=this.zoneMax;
+    this.loaves.forEach((loaf) => {
+      if (loaf.state==='baking' && inZone){
+        loaf.progress += dt;
+        const t=Math.min(loaf.progress/6,1);
+        loaf.img.setFillStyle(lerpColor(0xE8D9B0,0xC17A3A,t));
+        if (loaf.progress>=6){
+          loaf.state='done';
+          loaf.label.setText('tap!');
+          loaf.pulseTween=this.tweens.add({ targets:loaf.img, scaleX:1.1, scaleY:1.1, duration:260, yoyo:true, repeat:-1 });
+        }
+      }
+    });
+  }
+  finish(){
+    this.done=true;
+    GameState.set('bakery-minigame-done', true);
+    Dialogue.show([
+      { speaker:'', text:"The last batch comes out golden. Outside, a cart is already waiting." }
+    ], () => {
+      this.cameras.main.fadeOut(500,0,0,0);
+      this.cameras.main.once('camerafadeoutcomplete', () => {
+        this.scene.start('RiverCutsceneScene', { nextScene:this.nextScene, nextSceneData:this.nextSceneData });
+      });
+    });
+  }
+}
+
+/* =========================================================================
+   RIVER CUTSCENE — short, non-interactive: the cart makes its daily trip.
+   ========================================================================= */
+class RiverCutsceneScene extends Phaser.Scene {
+  constructor(){ super('RiverCutsceneScene'); }
+  init(data){ this.nextScene=data.nextScene; this.nextSceneData=data.nextSceneData; }
+  create(){
+    fillSky(this,800,450,0x6a8a9a,0x2a4a5a);
+    const river=this.add.graphics(); river.fillStyle(0x3a6a7a,0.8); river.fillRect(0,320,800,60);
+    const shimmer=this.add.graphics(); shimmer.fillStyle(0x7ab8c8,0.4);
+    for (let i=0;i<10;i++) shimmer.fillEllipse(i*85+30,340,50,6);
+
+    const caption=this.add.text(400,60,'Every afternoon, the same road. The same river.',{fontFamily:'Georgia, serif',fontStyle:'italic',fontSize:'16px',color:'#EFE3C8'}).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({ targets:caption, alpha:1, duration:600 });
+
+    makeCartTexture(this,'cart-tex');
+    const cart=this.add.image(-60,300,'cart-tex').setOrigin(0.5,1);
+    this.tweens.add({ targets:cart, x:420, duration:2200, ease:'Sine.easeInOut', onComplete:() => this.tipCart(cart) });
+  }
+  tipCart(cart){
+    this.tweens.add({ targets:cart, angle:35, duration:500, onComplete:() => {
+      for (let i=0;i<6;i++){
+        const loaf=this.add.ellipse(410+i*4, 282, 16,10, 0xC17A3A);
+        this.tweens.add({ targets:loaf, x:'+='+Phaser.Math.Between(-20,40), y:325, alpha:0, duration:700, delay:i*80 });
+      }
+      this.time.delayedCall(1100, () => {
+        this.tweens.add({ targets:cart, angle:0, x:900, duration:900 });
+        this.time.delayedCall(700, () => this.finish());
+      });
+    }});
+  }
+  finish(){
+    this.cameras.main.fadeOut(500,0,0,0);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(this.nextScene, this.nextSceneData));
+  }
+}
+
+/* =========================================================================
+   CARPET SCENE — the world-map mechanic. Bug fixes baked in from earlier
+   passes: backgrounds genuinely scroll (TileSprite tilePositionX advances),
+   the carpet's collision body matches its baked texture exactly with no
+   manual offset guesswork, and explicit y-threshold checks end the run at
+   both the ceiling and the ground rather than relying on collideWorldBounds.
    ========================================================================= */
 class CarpetScene extends Phaser.Scene {
   constructor(){ super('CarpetScene'); }
   init(data){
+    this.initData = data;
     this.nextScene = data.nextScene || 'OpenAreaScene';
     this.nextSceneData = data.nextSceneData || {};
     this.targetDistance = data.distance || 2400;
+    this.theme = data.theme || 'city';
+    this.wind = data.wind || 0;
+    this.gapSize = data.gapSize || 150;
+    this.spawnRange = data.spawnRange || [1.3,1.8];
   }
   create(){
     this.distance=0; this.ended=false; this.started=false; this.spawnTimer=1.0;
+    this.windTimer = Phaser.Math.FloatBetween(1.5,3);
     Touch.hide();
     this.physics.world.setBounds(0,0,800,450);
 
-    fillSky(this,800,450,COLORS.saffron,COLORS.dusk);
-    makeMountainStripTexture(this,'mtn-strip');
-    this.mtnLayer=this.add.tileSprite(400,290,800,170,'mtn-strip');
-    makeCityStripTexture(this,'city-strip');
-    this.cityLayer=this.add.tileSprite(400,355,800,130,'city-strip').setAlpha(0.85);
-    makeGroundStripTexture(this,'ground-strip');
-    this.groundLayer=this.add.tileSprite(400,432,800,36,'ground-strip');
-    makeCloudStripTexture(this,'cloud-strip');
-    this.cloudLayer=this.add.tileSprite(400,42,800,64,'cloud-strip').setAlpha(0.55);
+    this.buildBackground();
 
     makeCarpetTexture(this,'carpet-fly',64,20);
     this.carpet=this.physics.add.sprite(180,225,'carpet-fly');
@@ -918,6 +1176,37 @@ class CarpetScene extends Phaser.Scene {
     this.spaceKey=this.input.keyboard.addKey('SPACE');
     this.input.on('pointerdown', () => this.flap());
   }
+  buildBackground(){
+    const t = CARPET_THEMES[this.theme] || CARPET_THEMES.city;
+    fillSky(this,800,450,t.skyTop,t.skyBottom);
+
+    if (t.stars) {
+      const starG=this.add.graphics();
+      starG.fillStyle(0xF5EEDD,0.8);
+      for (let i=0;i<40;i++) starG.fillCircle(Phaser.Math.Between(0,800),Phaser.Math.Between(0,190),Phaser.Math.FloatBetween(0.6,1.6));
+      const moonG=this.add.graphics();
+      moonG.fillStyle(0xEFE3C8,0.9); moonG.fillCircle(680,70,26);
+    }
+
+    makeMountainStripTexture(this,'mtn-strip-'+this.theme, t.silCol);
+    this.mtnLayer=this.add.tileSprite(400,290,800,170,'mtn-strip-'+this.theme);
+
+    const midKey='mid-strip-'+this.theme;
+    if (t.useCity) makeCityStripTexture(this, midKey, t.silCol);
+    else makeVillageStripTexture(this, midKey, t.silCol);
+    this.cityLayer=this.add.tileSprite(400,355,800,130,midKey).setAlpha(0.85);
+
+    makeGroundStripTexture(this,'ground-strip-'+this.theme, t.groundCol);
+    this.groundLayer=this.add.tileSprite(400,432,800,36,'ground-strip-'+this.theme);
+
+    makeCloudStripTexture(this,'cloud-strip-'+this.theme, t.cloudCol);
+    this.cloudLayer=this.add.tileSprite(400,42,800,64,'cloud-strip-'+this.theme).setAlpha(t.cloudAlpha);
+
+    if (t.storm) {
+      this.lightning = this.add.rectangle(400,225,800,450,0xffffff,0).setDepth(80);
+      this.lightningTimer = Phaser.Math.FloatBetween(2,4);
+    }
+  }
   update(time, delta){
     if (this.ended) return;
     if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) this.flap();
@@ -925,6 +1214,15 @@ class CarpetScene extends Phaser.Scene {
     const dt=delta/1000;
     this.cloudLayer.tilePositionX += 8*dt;
     this.updateTassels(time);
+
+    if (this.lightningTimer !== undefined) {
+      this.lightningTimer -= dt;
+      if (this.lightningTimer <= 0) {
+        this.lightning.setAlpha(0.35);
+        this.time.delayedCall(90, () => this.lightning.setAlpha(0));
+        this.lightningTimer = Phaser.Math.FloatBetween(2.5,4.5);
+      }
+    }
 
     if (!this.started) return;
 
@@ -935,7 +1233,16 @@ class CarpetScene extends Phaser.Scene {
     this.cityLayer.tilePositionX += 55*dt;
     this.groundLayer.tilePositionX += 190*dt;
 
+    if (this.wind > 0) {
+      this.windTimer -= dt;
+      if (this.windTimer <= 0) {
+        this.carpet.body.velocity.y += Phaser.Math.Between(-1,1) * this.wind * 85;
+        this.windTimer = Phaser.Math.FloatBetween(1.4,2.6);
+      }
+    }
+
     if (this.carpet.body.velocity.y < -260) this.carpet.body.velocity.y = -260;
+    if (this.carpet.body.velocity.y > 340) this.carpet.body.velocity.y = 340;
     this.carpet.angle += Math.sin(time/260) * 0.4;
 
     if (this.carpet.y <= 42 || this.carpet.y >= 408) { this.crash(); return; }
@@ -943,7 +1250,7 @@ class CarpetScene extends Phaser.Scene {
     this.obstacles.getChildren().slice().forEach((o) => { if (o.x < -80) o.destroy(); });
 
     this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0) { this.spawnObstacle(); this.spawnTimer = Phaser.Math.FloatBetween(1.3,1.8); }
+    if (this.spawnTimer <= 0) { this.spawnObstacle(); this.spawnTimer = Phaser.Math.FloatBetween(this.spawnRange[0], this.spawnRange[1]); }
 
     if (this.distance >= this.targetDistance) this.succeed();
   }
@@ -966,7 +1273,7 @@ class CarpetScene extends Phaser.Scene {
     this.time.delayedCall(220, () => { if (!this.ended) this.carpet.setAngle(6); });
   }
   spawnObstacle(){
-    const gapY=Phaser.Math.Between(100,310), gapSize=150;
+    const gapY=Phaser.Math.Between(100,310), gapSize=this.gapSize;
     const topH=Math.max(gapY-gapSize/2,10), botH=Math.max(450-(gapY+gapSize/2),10);
     const top=this.add.rectangle(830,0,48,topH,COLORS.terracotta).setOrigin(0,0).setStrokeStyle(3,COLORS.outline,0.85);
     const bot=this.add.rectangle(830,gapY+gapSize/2,48,botH,COLORS.terracotta).setOrigin(0,0).setStrokeStyle(3,COLORS.outline,0.85);
@@ -987,8 +1294,8 @@ class CarpetScene extends Phaser.Scene {
     this.add.text(400,205,'The carpet dips low\u2014',{fontFamily:'Georgia, serif',fontSize:'21px',color:'#EFE3C8'}).setOrigin(0.5).setDepth(91);
     this.add.text(400,245,'Tap, click, or press Space to try again',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'15px',color:'#E8A33D'}).setOrigin(0.5).setDepth(91);
     this.time.delayedCall(350, () => {
-      this.input.once('pointerdown', () => this.scene.restart());
-      this.input.keyboard.once('keydown-SPACE', () => this.scene.restart());
+      this.input.once('pointerdown', () => this.scene.restart(this.initData));
+      this.input.keyboard.once('keydown-SPACE', () => this.scene.restart(this.initData));
     });
   }
   succeed(){
@@ -997,6 +1304,18 @@ class CarpetScene extends Phaser.Scene {
     this.cameras.main.fadeOut(500,0,0,0);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(this.nextScene, this.nextSceneData));
   }
+}
+
+/* ---- carpet-flight themes: reused by every flight, one entry per look ---- */
+const CARPET_THEMES = {
+  city:    { skyTop:COLORS.saffron, skyBottom:COLORS.dusk, silCol:COLORS.silhouette, groundCol:COLORS.sand, cloudCol:COLORS.cloudWhite, cloudAlpha:0.55, useCity:true },
+  village: { skyTop:0xE8C468, skyBottom:0x6a8a9a, silCol:0x3a4a3a, groundCol:0x9aa870, cloudCol:COLORS.cloudWhite, cloudAlpha:0.5, useCity:false },
+  night:   { skyTop:0x14102a, skyBottom:0x05040a, silCol:0x0a0814, groundCol:0x3a3a4a, cloudCol:0x2a2840, cloudAlpha:0.35, useCity:false, stars:true },
+  storm:   { skyTop:0x4a4a5a, skyBottom:0x1a1a24, silCol:0x14121c, groundCol:0x5a5560, cloudCol:0x6a6a78, cloudAlpha:0.75, useCity:false, storm:true }
+};
+function flyTo(scene, config) {
+  scene.cameras.main.fadeOut(400,0,0,0);
+  scene.cameras.main.once('camerafadeoutcomplete', () => { scene.scene.start('CarpetScene', config); });
 }
 
 /* =========================================================================
@@ -1081,7 +1400,96 @@ const AREAS = {
           { speaker:'Old Man', text:"Bring him to speak with you first. Then maybe I'll have something to tell you." }
         ],
         flag:'gravekeeper-needed',
-        onComplete:(scene)=>{ scene.endOfSlice(); }
+        onComplete:(scene)=>{
+          flyTo(scene, {
+            nextScene:'OpenAreaScene', nextSceneData:{areaKey:'gravekeeper'},
+            distance:2200, theme:'village', wind:1, gapSize:130, spawnRange:[1.0,1.4]
+          });
+        }
+      }
+    ],
+    exits:[]
+  },
+  gravekeeper: {
+    width:1300, height:750,
+    skyTop:0x6a7a8a, groundColor:0x7a7568,
+    intro:"Cracked headstones lean at odd angles. Somewhere here, someone is still keeping watch.",
+    playerStart:{x:80,y:650},
+    structures:[
+      { type:'house', x:1150,y:560, collide:true, footW:70, footH:24 },
+      { type:'deadtree', x:220,y:400, collide:true, footW:14, footH:10 },
+      { type:'deadtree', x:900,y:280, collide:true, footW:14, footH:10 },
+      { type:'deadtree', x:500,y:640, collide:true, footW:14, footH:10 },
+      { type:'rock', x:350,y:500, collide:false },
+      { type:'rock', x:750,y:620, collide:false },
+      { type:'rock', x:1050,y:340, collide:false }
+    ],
+    npcs:[
+      { x:280,y:560, spriteType:'grave', hint:"Just a cracked stone, moss-grown. Nothing here." },
+      { x:460,y:460, spriteType:'grave', hint:"The name's worn smooth. No one left to remember it." },
+      { x:620,y:600, spriteType:'grave', hint:"Weeds have grown clean through the plot." },
+      { x:780,y:400, spriteType:'grave', hint:"Empty. Whoever this was for, they never came." },
+      { x:940,y:540, spriteType:'grave', hint:"Just dirt and a leaning stone." },
+      { x:600,y:280, spriteType:'grave', hint:"Cracked clean in half. Nothing underneath but roots." },
+      { x:1000,y:460, isTarget:true, spriteType:'grave',
+        dialogue:[
+          { speaker:'Gravekeeper', text:"...Go away. Whatever you're looking for, I don't have it." },
+          { speaker:'You', text:"I'm not here to rob a grave. I only want to talk." },
+          { speaker:'Gravekeeper', text:"Twenty years I've sat with this. A dying man's last words, and I never once did what he asked." },
+          { speaker:'Gravekeeper', text:"He begged me to carry something to 'the baker who owes the house a debt.' I panicked. I ran. I've been sitting still ever since." },
+          { speaker:'Gravekeeper', text:"Bring me proof the baker's still alive \u2014 still trustworthy \u2014 and maybe I'll finally do what I should have done twenty years ago." }
+        ],
+        flag:'baker-needed',
+        onComplete:(scene)=>{
+          flyTo(scene, {
+            nextScene:'OpenAreaScene', nextSceneData:{areaKey:'baker'},
+            distance:2300, theme:'night', wind:0, gapSize:140, spawnRange:[1.2,1.6]
+          });
+        }
+      }
+    ],
+    exits:[]
+  },
+  baker: {
+    width:1100, height:650,
+    skyTop:0x1a1420, groundColor:0x6a5a48,
+    intro:"Smoke rises from a dozen chimneys, even this late. Something about this bakery never stops.",
+    playerStart:{x:80,y:560},
+    structures:[
+      { type:'bakery', x:850,y:520, collide:true, footW:90, footH:28 },
+      { type:'tree', x:200,y:400, collide:true, footW:16, footH:10 },
+      { type:'rock', x:450,y:600, collide:false },
+      { type:'rock', x:650,y:340, collide:false },
+      { type:'well', x:400,y:480, collide:true, footW:40, footH:20 }
+    ],
+    npcs:[
+      { x:300,y:520, appearance:{skin:COLORS.skin1, robe:0x5a4a3a, accent:COLORS.saffron, headwear:'cap', headwearColor:0x3a2a1a, expression:'neutral'}, hint:"Bread every day, and none of it ever sold. Strange business." },
+      { x:550,y:450, appearance:{skin:COLORS.skin2, robe:0x4a5a4a, accent:COLORS.turquoise, headwear:'turban', headwearColor:0x3a4a3a, expression:'neutral'}, hint:"The baker doesn't sleep, they say. Ovens going at all hours." },
+      { x:820,y:600, isTarget:true,
+        appearance:{skin:COLORS.skin1, robe:0xC9A050, accent:0xEFE3C8, headwear:'cap', headwearColor:0x8a6a3a, expression:'neutral'},
+        getDialogue(){
+          if (GameState.get('bakery-minigame-done')) {
+            return [
+              { speaker:'Baker', text:"You've seen it now. Every loaf, every day, into the river." },
+              { speaker:'You', text:"Why? Twenty ovens of bread, and none of it eaten?" },
+              { speaker:'Baker', text:"It's not my place to ask why. Someone set this up years ago \u2014 a go-between, working for someone I never met." },
+              { speaker:'Baker', text:"All I know is one name that go-between kept mentioning \u2014 a saddler. Said he'd know if any of this still mattered." },
+              { speaker:'Baker', text:"Bring me word of the saddler, and maybe I'll have more to say. Until then, this is all you get." }
+            ];
+          }
+          return [{ speaker:'Baker', text:"No time to talk. Ovens don't wait. Apron's on the hook, if you want to make yourself useful." }];
+        },
+        onComplete:(scene)=>{
+          if (GameState.get('bakery-minigame-done')) {
+            GameState.set('saddler-needed', true);
+            scene.endOfSlice('Saddler');
+          } else {
+            scene.cameras.main.fadeOut(400,0,0,0);
+            scene.cameras.main.once('camerafadeoutcomplete', () => {
+              scene.scene.start('BakeryScene', { nextScene:'OpenAreaScene', nextSceneData:{areaKey:'baker'} });
+            });
+          }
+        }
       }
     ],
     exits:[]
@@ -1101,7 +1509,7 @@ window.addEventListener('load', () => {
     backgroundColor: '#1B1330',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default:'arcade', arcade:{ gravity:{y:0}, debug:false } },
-    scene: [TitleScene, IntroScene, MonthsEarlierScene, OpenAreaScene, PalaceScene, CarpetScene]
+    scene: [TitleScene, IntroScene, MonthsEarlierScene, OpenAreaScene, PalaceScene, CarpetScene, BakeryScene, RiverCutsceneScene]
   });
 });
 </script>
