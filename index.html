@@ -604,14 +604,39 @@ function lerpColor(c1, c2, t) {
   return (r<<16)|(g<<8)|b;
 }
 
+/* One small reusable particle: a dot that drifts by (dx,dy) and fades out.
+   Used for embers, steam, crumb bursts, and splashes -- a single simple,
+   fully manual implementation rather than the particle-emitter API, so its
+   behavior is easy to verify by reading it. */
+function spawnParticle(scene, x, y, opts) {
+  opts = opts || {};
+  const p = scene.add.circle(x, y, opts.size!==undefined?opts.size:2.5, opts.color!==undefined?opts.color:0xF5B44A, opts.alpha!==undefined?opts.alpha:0.9);
+  scene.tweens.add({
+    targets:p,
+    x: x + (opts.dx!==undefined?opts.dx:Phaser.Math.Between(-15,15)),
+    y: y + (opts.dy!==undefined?opts.dy:-Phaser.Math.Between(40,80)),
+    alpha:0,
+    duration: opts.duration||900,
+    ease: opts.ease||'Sine.easeOut',
+    onComplete:()=>p.destroy()
+  });
+  return p;
+}
+
+function makeBirdTexture(scene, key) {
+  const W=20,H=10;
+  return ensureTexture(scene,key,W,H,(g)=>{
+    g.lineStyle(2,0x241A2E,0.7);
+    g.beginPath(); g.moveTo(0,H*0.6); g.lineTo(W*0.5,0); g.lineTo(W,H*0.6); g.strokePath();
+  });
+}
+
 function makeOvenTexture(scene, key) {
   const W=140, H=170;
   return ensureTexture(scene, key, W, H, (g) => {
     g.fillStyle(COLORS.outline,1); g.fillRoundedRect(-2,-2,W+4,H*0.85+4,{tl:16,tr:16,bl:6,br:6});
     g.fillStyle(COLORS.terracottaDark,1); g.fillRoundedRect(0,0,W,H*0.85,{tl:14,tr:14,bl:4,br:4});
     g.fillStyle(0x0d0805,1); g.fillEllipse(W/2,H*0.62,W*0.5,H*0.5);
-    g.fillStyle(0xE8742E,0.9); g.fillEllipse(W/2,H*0.72,W*0.34,H*0.28);
-    g.fillStyle(0xF5B44A,0.9); g.fillEllipse(W/2,H*0.78,W*0.2,H*0.14);
     g.fillStyle(COLORS.outline,1); g.fillRect(W*0.62,-30,22,34);
     g.fillStyle(COLORS.terracotta,1); g.fillRect(W*0.63,-28,20,32);
   });
@@ -983,6 +1008,7 @@ class BakeryScene extends Phaser.Scene {
     this.batchesComplete = 0;
     this.batchTarget = 5;
     this.done = false;
+    this.emberTimer = 1;
 
     this.buildBackground();
     this.buildGauge();
@@ -1001,9 +1027,16 @@ class BakeryScene extends Phaser.Scene {
     const floor=this.add.graphics(); floor.fillStyle(COLORS.terracottaDark,1); floor.fillRect(0,360,800,90);
     makeOvenTexture(this,'oven-tex');
     this.add.image(400,340,'oven-tex').setOrigin(0.5,1).setScale(1.5);
+
+    /* Fire glow is separate from the oven shell so its size/brightness can
+       react to the live temperature, and it gets its own flicker. */
+    this.glowOuter = this.add.ellipse(400,246,70,54,0xE8742E,0.85);
+    this.glowInner = this.add.ellipse(400,258,42,30,0xF5B44A,0.9);
+
     this.add.rectangle(700,150,64,74,0x1a1008).setStrokeStyle(3,COLORS.outline,1);
     makeCharacterTexture(this,'watcher-tex', PLAYER_APPEARANCE);
-    this.add.image(700,196,'watcher-tex').setOrigin(0.5,1).setScale(0.85);
+    this.watcherImg = this.add.image(700,196,'watcher-tex').setOrigin(0.5,1).setScale(0.85);
+    this.tweens.add({ targets:this.watcherImg, scaleY:0.88, duration:1500, yoyo:true, repeat:-1, ease:'Sine.easeInOut' });
   }
   buildGauge(){
     const gx=60, gy=386, gw=680, gh=26;
@@ -1033,6 +1066,7 @@ class BakeryScene extends Phaser.Scene {
       if (this.done) return;
       this.temp=Math.min(100,this.temp+18);
       this.tweens.add({ targets:btn, scaleX:0.94, scaleY:0.94, duration:80, yoyo:true });
+      for (let i=0;i<3;i++) spawnParticle(this, 400+Phaser.Math.Between(-18,18), 244, { color:0xF5B44A, size:Phaser.Math.FloatBetween(1.5,3), dy:-Phaser.Math.Between(45,80), duration:600 });
     });
   }
   buildLoaves(){
@@ -1040,7 +1074,7 @@ class BakeryScene extends Phaser.Scene {
     [260,400,540].forEach((x) => {
       const img=this.add.ellipse(x,300,50,32,0xE8D9B0).setStrokeStyle(2,COLORS.outline,0.7).setInteractive({useHandCursor:true});
       const label=this.add.text(x,300,'',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'10px',fontStyle:'bold',color:'#1B1330'}).setOrigin(0.5);
-      const loaf={ img, label, progress:0, state:'baking', pulseTween:null };
+      const loaf={ img, label, progress:0, state:'baking', pulseTween:null, steamTimer:Phaser.Math.FloatBetween(1,2) };
       img.on('pointerdown', () => this.tapLoaf(loaf));
       this.loaves.push(loaf);
     });
@@ -1051,7 +1085,11 @@ class BakeryScene extends Phaser.Scene {
     loaf.img.setScale(1);
     this.batchesComplete++;
     this.updateProgressText();
-    loaf.state='baking'; loaf.progress=0;
+    for (let i=0;i<5;i++){
+      const ang=(i/5)*Math.PI*2;
+      spawnParticle(this, loaf.img.x, loaf.img.y, { color:COLORS.gold, size:2.5, dx:Math.cos(ang)*28, dy:Math.sin(ang)*22-8, duration:420, ease:'Cubic.easeOut' });
+    }
+    loaf.state='baking'; loaf.progress=0; loaf.steamTimer=Phaser.Math.FloatBetween(1,2);
     loaf.img.setFillStyle(0xE8D9B0);
     loaf.label.setText('');
     this.tweens.add({ targets:loaf.img, scaleX:1.25, scaleY:1.25, duration:120, yoyo:true });
@@ -1066,12 +1104,32 @@ class BakeryScene extends Phaser.Scene {
     this.temp=Math.max(0,this.temp-6*dt);
     this.drawGaugeFill();
 
+    const heatFactor = Phaser.Math.Clamp(this.temp/100, 0.22, 1.3);
+    const flicker = 1 + Math.sin(time/90)*0.06;
+    const glowScale = (0.65+heatFactor*0.55) * flicker;
+    this.glowOuter.setScale(glowScale);
+    this.glowInner.setScale(glowScale*0.9);
+    this.glowOuter.setAlpha(Phaser.Math.Clamp(0.45+heatFactor*0.4,0,1));
+
+    this.emberTimer -= dt;
+    if (this.emberTimer <= 0){
+      spawnParticle(this, 400+Phaser.Math.Between(-20,20), 240, { color:0xF5B44A, size:Phaser.Math.FloatBetween(1.5,3), dy:-Phaser.Math.Between(50,90), dx:Phaser.Math.Between(-15,15), duration:Phaser.Math.Between(700,1200) });
+      this.emberTimer = Phaser.Math.FloatBetween(0.9,1.7) / heatFactor;
+    }
+
     const inZone=this.temp>=this.zoneMin && this.temp<=this.zoneMax;
     this.loaves.forEach((loaf) => {
       if (loaf.state==='baking' && inZone){
         loaf.progress += dt;
         const t=Math.min(loaf.progress/6,1);
         loaf.img.setFillStyle(lerpColor(0xE8D9B0,0xC17A3A,t));
+
+        loaf.steamTimer -= dt;
+        if (loaf.steamTimer <= 0){
+          spawnParticle(this, loaf.img.x+Phaser.Math.Between(-8,8), loaf.img.y-10, { color:0xEFE3C8, alpha:0.32, size:3.5, dy:-Phaser.Math.Between(24,38), dx:Phaser.Math.Between(-6,6), duration:1300 });
+          loaf.steamTimer = Phaser.Math.FloatBetween(1.4,2.4);
+        }
+
         if (loaf.progress>=6){
           loaf.state='done';
           loaf.label.setText('tap!');
@@ -1101,29 +1159,69 @@ class RiverCutsceneScene extends Phaser.Scene {
   constructor(){ super('RiverCutsceneScene'); }
   init(data){ this.nextScene=data.nextScene; this.nextSceneData=data.nextSceneData; }
   create(){
-    fillSky(this,800,450,0x6a8a9a,0x2a4a5a);
-    const river=this.add.graphics(); river.fillStyle(0x3a6a7a,0.8); river.fillRect(0,320,800,60);
-    const shimmer=this.add.graphics(); shimmer.fillStyle(0x7ab8c8,0.4);
-    for (let i=0;i<10;i++) shimmer.fillEllipse(i*85+30,340,50,6);
+    fillSky(this,800,450,0xC98A5A,0x2a4a5a);
+    this.add.circle(650,110,50,0xF0C85A,0.4);
+    this.add.circle(650,110,30,0xF5D68C,0.85);
 
-    const caption=this.add.text(400,60,'Every afternoon, the same road. The same river.',{fontFamily:'Georgia, serif',fontStyle:'italic',fontSize:'16px',color:'#EFE3C8'}).setOrigin(0.5).setAlpha(0);
+    for (let i=0;i<8;i++){
+      const x=30+i*105+Phaser.Math.Between(-12,12);
+      const reed=this.add.graphics();
+      reed.lineStyle(3,0x3a5a3a,0.6);
+      reed.beginPath(); reed.moveTo(x,322); reed.lineTo(x-4,286); reed.strokePath();
+      reed.beginPath(); reed.moveTo(x+6,322); reed.lineTo(x+11,290); reed.strokePath();
+      reed.beginPath(); reed.moveTo(x-8,322); reed.lineTo(x-11,296); reed.strokePath();
+    }
+
+    const river=this.add.graphics(); river.fillStyle(0x3a6a7a,0.85); river.fillRect(0,320,800,60);
+    for (let i=0;i<10;i++){
+      const s=this.add.ellipse(i*85+30,338+Phaser.Math.Between(-4,4),50,6,0x7ab8c8,0.4);
+      this.tweens.add({ targets:s, alpha:0.12, scaleX:1.3, duration:900+Math.random()*500, yoyo:true, repeat:-1, delay:Math.random()*600 });
+    }
+
+    makeBirdTexture(this,'bird-tex');
+    this.spawnBird(100,68,4200);
+    this.time.delayedCall(1300, () => this.spawnBird(-40,92,3800));
+
+    const caption=this.add.text(400,45,'Every afternoon, the same road. The same river.',{fontFamily:'Georgia, serif',fontStyle:'italic',fontSize:'16px',color:'#EFE3C8'}).setOrigin(0.5).setAlpha(0);
     this.tweens.add({ targets:caption, alpha:1, duration:600 });
 
     makeCartTexture(this,'cart-tex');
     const cart=this.add.image(-60,300,'cart-tex').setOrigin(0.5,1);
-    this.tweens.add({ targets:cart, x:420, duration:2200, ease:'Sine.easeInOut', onComplete:() => this.tipCart(cart) });
+    this.bobTween=this.tweens.add({ targets:cart, y:296, duration:140, yoyo:true, repeat:-1 });
+    this.tweens.add({ targets:cart, x:420, duration:2200, ease:'Sine.easeInOut', onComplete:() => {
+      this.bobTween.stop(); cart.y=300;
+      this.tipCart(cart);
+    }});
+  }
+  spawnBird(x,y,dur){
+    const b=this.add.image(x,y,'bird-tex');
+    this.tweens.add({ targets:b, x:x+700, duration:dur, ease:'Linear' });
   }
   tipCart(cart){
+    this.tweens.add({ targets:this.cameras.main, zoom:1.12, duration:400, yoyo:true, hold:900, ease:'Sine.easeInOut' });
     this.tweens.add({ targets:cart, angle:35, duration:500, onComplete:() => {
       for (let i=0;i<6;i++){
-        const loaf=this.add.ellipse(410+i*4, 282, 16,10, 0xC17A3A);
-        this.tweens.add({ targets:loaf, x:'+='+Phaser.Math.Between(-20,40), y:325, alpha:0, duration:700, delay:i*80 });
+        const startX=410+i*4;
+        const loaf=this.add.ellipse(startX, 282, 16,10, 0xC17A3A);
+        const targetX=startX+Phaser.Math.Between(-20,40);
+        this.tweens.add({ targets:loaf, x:targetX, y:325, duration:650, delay:i*80, ease:'Quad.easeIn', onComplete:() => {
+          this.splash(loaf.x, 328);
+          loaf.destroy();
+        }});
       }
-      this.time.delayedCall(1100, () => {
+      this.time.delayedCall(1200, () => {
         this.tweens.add({ targets:cart, angle:0, x:900, duration:900 });
         this.time.delayedCall(700, () => this.finish());
       });
     }});
+  }
+  splash(x,y){
+    for (let i=0;i<5;i++){
+      const ang=(i/5)*Math.PI*2;
+      spawnParticle(this, x, y, { color:0xCDEEF2, size:Phaser.Math.FloatBetween(2,3.5), dx:Math.cos(ang)*18, dy:Math.sin(ang)*8-4, duration:400, alpha:0.85, ease:'Cubic.easeOut' });
+    }
+    const ring=this.add.circle(x,y,10,0xCDEEF2,0).setStrokeStyle(2,0xCDEEF2,0.6).setScale(0.3);
+    this.tweens.add({ targets:ring, scaleX:1.6, scaleY:1.6, alpha:0, duration:450, onComplete:()=>ring.destroy() });
   }
   finish(){
     this.cameras.main.fadeOut(500,0,0,0);
@@ -1333,8 +1431,11 @@ const AREAS = {
       { type:'stall', x:520,y:660, collide:true, footW:60, footH:20 },
       { type:'stall', x:790,y:610, collide:true, footW:60, footH:20 },
       { type:'stall', x:1000,y:700, collide:true, footW:60, footH:20 },
+      { type:'stall', x:280,y:760, collide:true, footW:60, footH:20 },
+      { type:'stall', x:1160,y:760, collide:true, footW:60, footH:20 },
       { type:'house', x:330,y:520, collide:true, footW:70, footH:24 },
       { type:'house', x:1130,y:540, collide:true, footW:70, footH:24 },
+      { type:'house', x:950,y:830, collide:true, footW:70, footH:24 },
       { type:'mosque', x:930,y:360, collide:true, footW:70, footH:26 },
       { type:'well', x:700,y:560, collide:true, footW:40, footH:20 },
       { type:'tree', x:140,y:640, collide:true, footW:16, footH:10 },
@@ -1363,7 +1464,12 @@ const AREAS = {
       { x:380,y:660, appearance:{skin:COLORS.skin2, robe:0x7a5a3a, accent:COLORS.turquoise, headwear:'cap', headwearColor:0x5a4a2a, expression:'neutral'}, hint:"Rugs, brassware, good rope \u2014 come, look, no charge for looking." },
       { x:790,y:460, appearance:{skin:COLORS.skin1, robe:0x5a3a6a, accent:COLORS.gold, headwear:'turban', headwearColor:0x8a5a6a, expression:'kind'}, hint:"The mosque bell rings at dusk. You'll hear it from anywhere in town." },
       { x:1080,y:430, appearance:{skin:COLORS.skin2, robe:0x3a5a4a, accent:COLORS.saffron, headwear:'cap', headwearColor:0x2a3a2a, expression:'neutral'}, hint:"Strange lights over the desert last night. Probably nothing." },
-      { x:620,y:780, appearance:{skin:COLORS.skin1, robe:0x6a4a5a, accent:COLORS.turquoise, headwear:'turban', headwearColor:0x4a3a4a, expression:'neutral'}, hint:"You've got the look of someone about to do something foolish." }
+      { x:620,y:780, appearance:{skin:COLORS.skin1, robe:0x6a4a5a, accent:COLORS.turquoise, headwear:'turban', headwearColor:0x4a3a4a, expression:'neutral'}, hint:"You've got the look of someone about to do something foolish." },
+      { x:320,y:710, appearance:{skin:COLORS.skin2, robe:0x8a6a3a, accent:COLORS.turquoise, headwear:'cap', headwearColor:0x5a4a2a, expression:'neutral'}, hint:"Dates, almonds, dried apricots \u2014 name your price." },
+      { x:1200,y:710, appearance:{skin:COLORS.skin1, robe:0x4a3a6a, accent:COLORS.gold, headwear:'turban', headwearColor:0x6a5a8a, expression:'neutral'}, hint:"Best rope in the bazaar, right here. Don't buy it anywhere else." },
+      { x:900,y:270, appearance:{skin:COLORS.skin2, robe:0x6a5a4a, accent:COLORS.turquoise, headwear:'turban', headwearColor:0x4a3a3a, beard:true, expression:'kind'}, hint:"That old traveler's been standing by the well for hours. Strange fellow." },
+      { x:520,y:480, appearance:{skin:COLORS.skin1, robe:0x5a6a3a, accent:COLORS.saffron, headwear:'cap', headwearColor:0x3a4a2a, expression:'neutral'}, hint:"Watch your coin purse. This bazaar has its share of quick hands." },
+      { x:1250,y:530, appearance:{skin:COLORS.skin2, robe:0x7a4a4a, accent:COLORS.gold, headwear:'cap', headwearColor:0x4a2a2a, expression:'kind'}, hint:"The caravans come through twice a month. You just missed the last one." }
     ],
     exits:[
       /* Direct-to-palace for now. The illustrated route-map scene slots in
@@ -1379,10 +1485,13 @@ const AREAS = {
     structures:[
       { type:'house', x:260,y:560, collide:true, footW:70, footH:24 },
       { type:'house', x:560,y:500, collide:true, footW:70, footH:24 },
+      { type:'house', x:850,y:610, collide:true, footW:70, footH:24 },
       { type:'tree', x:180,y:380, collide:true, footW:16, footH:10 },
       { type:'tree', x:640,y:280, collide:true, footW:16, footH:10 },
+      { type:'tree', x:960,y:440, collide:true, footW:16, footH:10 },
       { type:'rock', x:420,y:640, collide:false },
       { type:'rock', x:900,y:320, collide:false },
+      { type:'rock', x:300,y:300, collide:false },
       { type:'well', x:480,y:620, collide:true, footW:40, footH:20 }
     ],
     npcs:[
@@ -1390,6 +1499,9 @@ const AREAS = {
       { x:560,y:470, appearance:{skin:COLORS.skin2, robe:0x5a6a4a, accent:COLORS.saffron, headwear:'cap', headwearColor:0x3a4a2a, expression:'neutral'}, hint:"I don't get involved with them. Best keep walking." },
       { x:820,y:560, appearance:{skin:COLORS.skin1, robe:0x4a5a6a, accent:COLORS.gold, headwear:'turban', headwearColor:0x3a4a5a, expression:'neutral'}, hint:"They keep to themselves. Why do you ask about them?" },
       { x:1000,y:480, appearance:{skin:COLORS.skin2, robe:0x6a4a5a, accent:COLORS.turquoise, headwear:'cap', headwearColor:0x4a3a3a, expression:'neutral'}, hint:"Strange people. They never leave that old kiln together." },
+      { x:450,y:340, appearance:{skin:COLORS.skin1, robe:0x5a4a3a, accent:COLORS.turquoise, headwear:'turban', headwearColor:0x3a2a2a, beard:true, expression:'kind'}, hint:"I've lived here forty years. Never understood that kiln." },
+      { x:700,y:660, appearance:{skin:COLORS.skin2, robe:0x6a5a5a, accent:COLORS.gold, headwear:'cap', headwearColor:0x3a3a3a, expression:'neutral'}, hint:"Some say they were wealthy once. Look at them now." },
+      { x:1080,y:600, appearance:{skin:COLORS.skin1, robe:0x4a4a5a, accent:COLORS.saffron, headwear:'cap', headwearColor:0x2a2a3a, expression:'neutral'}, hint:"Don't stare at them. It isn't kind." },
       { x:1080,y:420, isTarget:true,
         appearance:{skin:COLORS.skin1, robe:0x9a9a9a, accent:COLORS.parchment, headwear:'none', expression:'neutral'},
         dialogue:[
@@ -1411,27 +1523,41 @@ const AREAS = {
     exits:[]
   },
   gravekeeper: {
-    width:1300, height:750,
+    width:1500, height:900,
     skyTop:0x6a7a8a, groundColor:0x7a7568,
-    intro:"Cracked headstones lean at odd angles. Somewhere here, someone is still keeping watch.",
-    playerStart:{x:80,y:650},
+    intro:"Cracked headstones lean at odd angles, dozens of them. Somewhere among them, someone is still keeping watch.",
+    playerStart:{x:80,y:800},
     structures:[
-      { type:'house', x:1150,y:560, collide:true, footW:70, footH:24 },
+      { type:'house', x:1350,y:700, collide:true, footW:70, footH:24 },
       { type:'deadtree', x:220,y:400, collide:true, footW:14, footH:10 },
       { type:'deadtree', x:900,y:280, collide:true, footW:14, footH:10 },
       { type:'deadtree', x:500,y:640, collide:true, footW:14, footH:10 },
+      { type:'deadtree', x:1200,y:500, collide:true, footW:14, footH:10 },
+      { type:'deadtree', x:680,y:820, collide:true, footW:14, footH:10 },
       { type:'rock', x:350,y:500, collide:false },
       { type:'rock', x:750,y:620, collide:false },
-      { type:'rock', x:1050,y:340, collide:false }
+      { type:'rock', x:1050,y:340, collide:false },
+      { type:'rock', x:150,y:750, collide:false },
+      { type:'rock', x:1420,y:520, collide:false }
     ],
     npcs:[
-      { x:280,y:560, spriteType:'grave', hint:"Just a cracked stone, moss-grown. Nothing here." },
-      { x:460,y:460, spriteType:'grave', hint:"The name's worn smooth. No one left to remember it." },
-      { x:620,y:600, spriteType:'grave', hint:"Weeds have grown clean through the plot." },
-      { x:780,y:400, spriteType:'grave', hint:"Empty. Whoever this was for, they never came." },
-      { x:940,y:540, spriteType:'grave', hint:"Just dirt and a leaning stone." },
-      { x:600,y:280, spriteType:'grave', hint:"Cracked clean in half. Nothing underneath but roots." },
-      { x:1000,y:460, isTarget:true, spriteType:'grave',
+      { x:240,y:560, spriteType:'grave', hint:"Just a cracked stone, moss-grown. Nothing here." },
+      { x:400,y:380, spriteType:'grave', hint:"The name's worn smooth. No one left to remember it." },
+      { x:320,y:720, spriteType:'grave', hint:"Weeds have grown clean through the plot." },
+      { x:560,y:470, spriteType:'grave', hint:"Empty. Whoever this was for, they never came." },
+      { x:640,y:300, spriteType:'grave', hint:"Just dirt and a leaning stone." },
+      { x:720,y:660, spriteType:'grave', hint:"Cracked clean in half. Nothing underneath but roots." },
+      { x:800,y:420, spriteType:'grave', hint:"The stone's so old you can't read a single letter." },
+      { x:880,y:560, spriteType:'grave', hint:"Somebody left flowers here once. Long since turned to dust." },
+      { x:960,y:700, spriteType:'grave', hint:"A shallow depression in the earth. Nothing more." },
+      { x:1020,y:400, spriteType:'grave', hint:"This one was never finished \u2014 just a marker, nothing beneath it." },
+      { x:1100,y:620, spriteType:'grave', hint:"Something small is buried here, maybe a bird. Not what you're looking for." },
+      { x:1080,y:300, spriteType:'grave', hint:"The ground here hasn't been disturbed in decades." },
+      { x:480,y:800, spriteType:'grave', hint:"A child's grave, unmarked. You move on, quietly." },
+      { x:860,y:800, spriteType:'grave', hint:"Someone scratched a name into this stone by hand. It isn't the name you need." },
+      { x:1280,y:640, spriteType:'grave', hint:"This plot was dug and never used." },
+      { x:1350,y:400, spriteType:'grave', hint:"Just stones stacked by the wind, nothing more." },
+      { x:1200,y:770, isTarget:true, spriteType:'grave',
         dialogue:[
           { speaker:'Gravekeeper', text:"...Go away. Whatever you're looking for, I don't have it." },
           { speaker:'You', text:"I'm not here to rob a grave. I only want to talk." },
@@ -1465,6 +1591,8 @@ const AREAS = {
     npcs:[
       { x:300,y:520, appearance:{skin:COLORS.skin1, robe:0x5a4a3a, accent:COLORS.saffron, headwear:'cap', headwearColor:0x3a2a1a, expression:'neutral'}, hint:"Bread every day, and none of it ever sold. Strange business." },
       { x:550,y:450, appearance:{skin:COLORS.skin2, robe:0x4a5a4a, accent:COLORS.turquoise, headwear:'turban', headwearColor:0x3a4a3a, expression:'neutral'}, hint:"The baker doesn't sleep, they say. Ovens going at all hours." },
+      { x:230,y:560, appearance:{skin:COLORS.skin1, robe:0x6a4a5a, accent:COLORS.gold, headwear:'cap', headwearColor:0x3a2a3a, expression:'neutral'}, hint:"You can smell this place from the palace road, on a still night." },
+      { x:650,y:560, appearance:{skin:COLORS.skin2, robe:0x3a4a5a, accent:COLORS.saffron, headwear:'turban', headwearColor:0x2a3a4a, beard:true, expression:'kind'}, hint:"Whatever he's baking for, it isn't for this town." },
       { x:820,y:600, isTarget:true,
         appearance:{skin:COLORS.skin1, robe:0xC9A050, accent:0xEFE3C8, headwear:'cap', headwearColor:0x8a6a3a, expression:'neutral'},
         getDialogue(){
