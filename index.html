@@ -490,6 +490,62 @@ function makeWellTexture(scene, key) {
   });
 }
 
+function makeDishTexture(scene, key, dishColor) {
+  const W=56, H=44;
+  return ensureTexture(scene, key, W, H, (g) => {
+    g.fillStyle(COLORS.outline,1); g.fillEllipse(W/2,H*0.65,W+4,H*0.5+4);
+    g.fillStyle(0x8A8478,1); g.fillEllipse(W/2,H*0.65,W,H*0.5);
+    g.fillStyle(dishColor,1); g.fillEllipse(W/2,H*0.53,W*0.7,H*0.4);
+  });
+}
+
+const DISH_TYPES = [
+  { key:'kebab', color:0xB3452E, label:'Kebab' },
+  { key:'pilaf', color:0xEFE3C8, label:'Pilaf' },
+  { key:'soup', color:0xC98F5E, label:'Soup' },
+  { key:'bread', color:0xE8D9B0, label:'Bread' },
+  { key:'stew', color:0x8A5A3C, label:'Stew' }
+];
+
+function pickRandom(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
+function shuffleArray(arr) {
+  for (let i=arr.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    const tmp=arr[i]; arr[i]=arr[j]; arr[j]=tmp;
+  }
+  return arr;
+}
+
+function makeSaddlePieceTexture(scene, key, type) {
+  let W,H;
+  if (type==='seat') { W=100; H=54; }
+  else if (type==='strap') { W=76; H=22; }
+  else if (type==='stirrups') { W=64; H=44; }
+  else { W=32; H=28; }
+  return ensureTexture(scene, key, W, H, (g) => {
+    if (type==='seat') {
+      g.fillStyle(COLORS.outline,1); g.fillEllipse(W/2,H/2,W+4,H+4);
+      g.fillStyle(COLORS.terracotta,1); g.fillEllipse(W/2,H/2,W,H);
+      g.fillStyle(COLORS.terracottaDark,0.5); g.fillEllipse(W/2,H*0.62,W*0.72,H*0.5);
+    } else if (type==='strap') {
+      g.fillStyle(COLORS.outline,1); g.fillRoundedRect(-2,-2,W+4,H+4,6);
+      g.fillStyle(0x6a4a35,1); g.fillRoundedRect(0,0,W,H,4);
+      g.fillStyle(COLORS.outline,1); g.fillRect(W-20,3,5,H-6);
+      g.fillStyle(COLORS.gold,0.8); g.fillRect(W-18,5,3,H-10);
+    } else if (type==='stirrups') {
+      [0.28,0.72].forEach((fx)=>{
+        g.fillStyle(COLORS.outline,1); g.fillEllipse(W*fx,H*0.5,W*0.42,H*0.85);
+        g.fillStyle(0x9a9488,1); g.fillEllipse(W*fx,H*0.5,W*0.34,H*0.7);
+        g.fillStyle(0x0d0805,1); g.fillEllipse(W*fx,H*0.5,W*0.16,H*0.4);
+      });
+    } else {
+      g.fillStyle(COLORS.outline,1); g.fillCircle(W/2,H/2,W/2+2);
+      g.fillStyle(COLORS.terracottaDark,1); g.fillCircle(W/2,H/2,W/2);
+      g.fillStyle(COLORS.gold,0.55); g.fillCircle(W/2,H*0.38,W*0.24);
+    }
+  });
+}
+
 function makeGateTexture(scene, key) {
   const W=76,H=110;
   return ensureTexture(scene,key,W,H,(g)=>{
@@ -681,32 +737,36 @@ class TitleScene extends Phaser.Scene {
 /* =========================================================================
    INTRO SCENE — the flash-forward hook
    ========================================================================= */
+function buildSkullHall(scene) {
+  fillSky(scene,800,450,COLORS.ink,COLORS.ink);
+  const glow=scene.add.graphics(); glow.fillStyle(COLORS.terracottaDark,0.3); glow.fillEllipse(400,430,700,60);
+
+  makeSkullTexture(scene,'skull-tex');
+  const hookY=150, count=7, emptyIndex=3;
+  for (let i=0;i<count;i++){
+    const x=130+i*90;
+    const hookG=scene.add.graphics();
+    hookG.lineStyle(3,0x5a4a6a,1);
+    hookG.beginPath(); hookG.arc(x,hookY,10,Phaser.Math.DegToRad(200),Phaser.Math.DegToRad(340),false); hookG.strokePath();
+    if (i===emptyIndex){
+      const hl=scene.add.graphics(); hl.fillStyle(COLORS.saffron,0.18); hl.fillCircle(x,hookY+38,22);
+    } else {
+      scene.add.image(x,hookY+38,'skull-tex');
+    }
+  }
+
+  makeTorchFlame(scene,'torch-flame-hall');
+  [90,710].forEach((x)=>{
+    scene.add.rectangle(x,320,6,60,0x2a1f1a);
+    const flame=scene.add.image(x,282,'torch-flame-hall');
+    scene.tweens.add({ targets:flame, scaleY:{from:0.85,to:1.2}, scaleX:{from:1.15,to:0.85}, duration:220, yoyo:true, repeat:-1 });
+  });
+}
+
 class IntroScene extends Phaser.Scene {
   constructor(){ super('IntroScene'); }
   create(){
-    fillSky(this,800,450,COLORS.ink,COLORS.ink);
-    const glow=this.add.graphics(); glow.fillStyle(COLORS.terracottaDark,0.3); glow.fillEllipse(400,430,700,60);
-
-    makeSkullTexture(this,'skull-tex');
-    const hookY=150, count=7, emptyIndex=3;
-    for (let i=0;i<count;i++){
-      const x=130+i*90;
-      const hookG=this.add.graphics();
-      hookG.lineStyle(3,0x5a4a6a,1);
-      hookG.beginPath(); hookG.arc(x,hookY,10,Phaser.Math.DegToRad(200),Phaser.Math.DegToRad(340),false); hookG.strokePath();
-      if (i===emptyIndex){
-        const hl=this.add.graphics(); hl.fillStyle(COLORS.saffron,0.18); hl.fillCircle(x,hookY+38,22);
-      } else {
-        this.add.image(x,hookY+38,'skull-tex');
-      }
-    }
-
-    makeTorchFlame(this,'torch-flame-intro');
-    [90,710].forEach((x)=>{
-      this.add.rectangle(x,320,6,60,0x2a1f1a);
-      const flame=this.add.image(x,282,'torch-flame-intro');
-      this.tweens.add({ targets:flame, scaleY:{from:0.85,to:1.2}, scaleX:{from:1.15,to:0.85}, duration:220, yoyo:true, repeat:-1 });
-    });
+    buildSkullHall(this);
 
     makeCharacterTexture(this,'sanobar-tex',{skin:COLORS.skin1,robe:COLORS.crimson,accent:COLORS.gold,headwear:'crown',headwearColor:0x2a1f1a,beard:true,expression:'stern'});
     this.add.image(400,410,'sanobar-tex').setScale(2.4).setOrigin(0.5,1).setTint(0x0b0714).setAlpha(0.92);
@@ -1230,6 +1290,324 @@ class RiverCutsceneScene extends Phaser.Scene {
 }
 
 /* =========================================================================
+   SADDLER SCENE — "assemble the saddle, piece by piece." Tap a piece to
+   select it, then tap the slot it belongs in. Wrong slot just gives a
+   gentle shake, no penalty — matching the 'not difficult' brief.
+   ========================================================================= */
+class SaddlerScene extends Phaser.Scene {
+  constructor(){ super('SaddlerScene'); }
+  init(data){
+    this.nextScene = data.nextScene || 'OpenAreaScene';
+    this.nextSceneData = data.nextSceneData || {};
+  }
+  create(){
+    Touch.hide();
+    this.done = false;
+    this.placedPieces = {};
+    this.placedCount = 0;
+    this.selectedPieceKey = null;
+    this.selectedLabel = null;
+
+    this.buildBackground();
+    this.buildFrame();
+    this.buildPieces();
+
+    this.progressText = this.add.text(400,40,'',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'16px',color:'#EFE3C8'}).setOrigin(0.5);
+    this.updateProgressText();
+
+    this.time.delayedCall(300, () => {
+      Dialogue.show([{ speaker:'', text:"Tap a piece, then tap where it belongs on the frame." }]);
+    });
+  }
+  buildBackground(){
+    fillSky(this,800,450,0x4a3a30,0x1e1610);
+    const floor=this.add.graphics(); floor.fillStyle(0x5a4a3a,1); floor.fillRect(0,380,800,70);
+
+    [80,720].forEach((x)=>{
+      const hook=this.add.graphics();
+      hook.lineStyle(2,0x3a2a1a,0.8);
+      hook.beginPath(); hook.moveTo(x,40); hook.lineTo(x,90); hook.strokePath();
+      hook.fillStyle(0x6a4a35,0.85); hook.fillRoundedRect(x-4,90,8,60,3);
+    });
+
+    makeCharacterTexture(this,'saddler-watch-tex', {skin:COLORS.skin2, robe:0x5a4a3a, accent:COLORS.terracotta, headwear:'cap', headwearColor:0x3a2a1a, beard:true, expression:'neutral'});
+    this.saddlerImg = this.add.image(690,380,'saddler-watch-tex').setOrigin(0.5,1).setScale(1.2);
+    this.tweens.add({ targets:this.saddlerImg, scaleY:1.24, duration:1500, yoyo:true, repeat:-1, ease:'Sine.easeInOut' });
+  }
+  buildFrame(){
+    const g=this.add.graphics();
+    g.lineStyle(3,COLORS.outline,0.5);
+    g.strokeRoundedRect(330,180,140,230,10);
+
+    this.slots = [
+      { key:'horn', x:400,y:210 },
+      { key:'seat', x:400,y:270 },
+      { key:'strap', x:400,y:330 },
+      { key:'stirrups', x:400,y:385 }
+    ];
+    this.slotOutlines = {};
+    this.slots.forEach((s) => {
+      const texKey='piece-'+s.key;
+      makeSaddlePieceTexture(this, texKey, s.key);
+      const outline=this.add.image(s.x,s.y,texKey).setAlpha(0.28).setTint(0x8a8478);
+      this.slotOutlines[s.key]=outline;
+      const zone=this.add.zone(s.x,s.y,100,54).setInteractive();
+      zone.on('pointerdown', () => this.tryPlace(s.key));
+    });
+  }
+  buildPieces(){
+    const positions = { horn:{x:150,y:260}, seat:{x:650,y:230}, strap:{x:150,y:400}, stirrups:{x:620,y:150} };
+    this.pieceImgs = {};
+    Object.keys(positions).forEach((key) => {
+      const texKey='piece-'+key;
+      makeSaddlePieceTexture(this, texKey, key);
+      const p = positions[key];
+      const img=this.add.image(p.x,p.y,texKey).setInteractive({useHandCursor:true});
+      img.on('pointerdown', () => this.selectPiece(key));
+      this.pieceImgs[key]=img;
+    });
+  }
+  selectPiece(key){
+    if (this.done || this.placedPieces[key]) return;
+    this.selectedPieceKey = key;
+    const img = this.pieceImgs[key];
+    this.tweens.add({ targets:img, scaleX:1.18, scaleY:1.18, duration:130, yoyo:true });
+    if (this.selectedLabel) this.selectedLabel.destroy();
+    this.selectedLabel = this.add.text(img.x, img.y-32, 'placing\u2026', {fontFamily:'Trebuchet MS, sans-serif', fontSize:'11px', fontStyle:'italic', color:'#F0C85A'}).setOrigin(0.5);
+  }
+  tryPlace(slotKey){
+    if (this.done || this.placedPieces[slotKey] || !this.selectedPieceKey) return;
+    if (this.selectedPieceKey === slotKey) {
+      const img = this.pieceImgs[slotKey];
+      const slot = this.slots.find((s)=>s.key===slotKey);
+      this.tweens.add({ targets:img, x:slot.x, y:slot.y, scaleX:1, scaleY:1, duration:320, ease:'Back.easeOut' });
+      this.placedPieces[slotKey]=true;
+      this.placedCount++;
+      this.slotOutlines[slotKey].setAlpha(0);
+      if (this.selectedLabel) { this.selectedLabel.destroy(); this.selectedLabel=null; }
+      this.selectedPieceKey=null;
+      for (let i=0;i<5;i++){
+        const ang=(i/5)*Math.PI*2;
+        spawnParticle(this, slot.x, slot.y, { color:COLORS.gold, size:2.2, dx:Math.cos(ang)*22, dy:Math.sin(ang)*18-6, duration:380 });
+      }
+      this.updateProgressText();
+      if (this.placedCount >= this.slots.length) this.finish();
+    } else {
+      const img = this.pieceImgs[this.selectedPieceKey];
+      this.tweens.add({ targets:img, x:img.x-6, duration:55, yoyo:true, repeat:3 });
+    }
+  }
+  updateProgressText(){
+    this.progressText.setText('Pieces placed: '+this.placedCount+' / '+this.slots.length);
+  }
+  finish(){
+    this.done=true;
+    GameState.set('saddle-minigame-done', true);
+    Dialogue.show([
+      { speaker:'', text:"The saddle comes together, piece by piece. It looks like it belongs to someone." }
+    ], () => {
+      this.cameras.main.fadeOut(500,0,0,0);
+      this.cameras.main.once('camerafadeoutcomplete', () => {
+        this.scene.start(this.nextScene, this.nextSceneData);
+      });
+    });
+  }
+}
+
+/* =========================================================================
+   KITCHEN SCENE — "serve dishes, gain reputation." Order comes in, tap the
+   matching plate among three. Wrong pick just shakes, no penalty.
+   ========================================================================= */
+class KitchenScene extends Phaser.Scene {
+  constructor(){ super('KitchenScene'); }
+  init(data){
+    this.nextScene = data.nextScene || 'OpenAreaScene';
+    this.nextSceneData = data.nextSceneData || {};
+  }
+  create(){
+    Touch.hide();
+    this.round = 0;
+    this.totalRounds = 5;
+    this.reputation = 0;
+    this.done = false;
+    this.locked = false;
+    this.optionImgs = [];
+    this.orderIcon = null;
+
+    this.buildBackground();
+    this.repText = this.add.text(400,40,'',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'16px',color:'#EFE3C8'}).setOrigin(0.5);
+    this.orderLabel = this.add.text(400,110,'',{fontFamily:'Georgia, serif',fontSize:'18px',color:'#E8A33D'}).setOrigin(0.5);
+    this.updateRepText();
+
+    this.time.delayedCall(300, () => {
+      Dialogue.show([{ speaker:'', text:"An order comes in. Match the dish, and don't be slow about it." }], () => this.nextRound());
+    });
+  }
+  buildBackground(){
+    fillSky(this,800,450,0x3a2a20,0x1a120c);
+    const floor=this.add.graphics(); floor.fillStyle(0x5a4a3a,1); floor.fillRect(0,380,800,70);
+    const counter=this.add.graphics();
+    counter.fillStyle(COLORS.outline,1); counter.fillRoundedRect(178,300,444,90,8);
+    counter.fillStyle(COLORS.terracottaDark,1); counter.fillRoundedRect(180,302,440,86,6);
+  }
+  nextRound(){
+    if (this.round >= this.totalRounds) { this.finish(); return; }
+    this.round++;
+    this.locked = false;
+
+    if (this.orderIcon) this.orderIcon.destroy();
+    this.optionImgs.forEach((o)=>o.img.destroy());
+    this.optionImgs = [];
+
+    const target = pickRandom(DISH_TYPES);
+    this.currentTarget = target;
+    this.orderLabel.setText('Order: '+target.label);
+
+    makeDishTexture(this, 'dish-'+target.key, target.color);
+    this.orderIcon = this.add.image(400,175,'dish-'+target.key).setScale(1.15);
+
+    const decoys = shuffleArray(DISH_TYPES.filter((d)=>d.key!==target.key));
+    const choices = shuffleArray([target, decoys[0], decoys[1]]);
+
+    const xs=[260,400,540];
+    choices.forEach((d,i) => {
+      makeDishTexture(this, 'dish-'+d.key, d.color);
+      const img=this.add.image(xs[i],345,'dish-'+d.key).setInteractive({useHandCursor:true});
+      img.on('pointerdown', () => this.pick(d.key, img));
+      this.optionImgs.push({ img, key:d.key });
+    });
+  }
+  pick(key, img){
+    if (this.locked || this.done) return;
+    if (key === this.currentTarget.key) {
+      this.locked = true;
+      this.reputation++;
+      this.updateRepText();
+      for (let i=0;i<5;i++){
+        const ang=(i/5)*Math.PI*2;
+        spawnParticle(this, img.x, img.y, { color:COLORS.gold, size:2.2, dx:Math.cos(ang)*22, dy:Math.sin(ang)*18-8, duration:400 });
+      }
+      this.tweens.add({ targets:img, scaleX:1.3, scaleY:1.3, alpha:0, duration:350, onComplete:() => this.nextRound() });
+    } else {
+      this.tweens.add({ targets:img, x:img.x-6, duration:55, yoyo:true, repeat:3 });
+    }
+  }
+  updateRepText(){
+    this.repText.setText('Reputation: '+this.reputation+' / '+this.totalRounds);
+  }
+  finish(){
+    this.done=true;
+    GameState.set('kitchen-minigame-done', true);
+    Dialogue.show([
+      { speaker:'', text:"Word travels fast in a kitchen. By evening, even the head chef is watching you sideways." }
+    ], () => {
+      this.cameras.main.fadeOut(500,0,0,0);
+      this.cameras.main.once('camerafadeoutcomplete', () => {
+        this.scene.start(this.nextScene, this.nextSceneData);
+      });
+    });
+  }
+}
+
+/* =========================================================================
+   AUDIENCE SCENE — brief exchange with Sanobar before he walks you to
+   the hall he's already warned every previous visitor about.
+   ========================================================================= */
+class AudienceScene extends Phaser.Scene {
+  constructor(){ super('AudienceScene'); }
+  create(){
+    this.buildRoom();
+    this.time.delayedCall(400, () => this.beginAudience());
+  }
+  buildRoom(){
+    fillSky(this,800,450,COLORS.dusk,COLORS.ink);
+    const floor=this.add.graphics();
+    for (let x=0;x<800;x+=40){ floor.fillStyle((x/40)%2===0?COLORS.terracotta:COLORS.terracottaDark,1); floor.fillRect(x,370,40,80); }
+
+    const arch=this.add.graphics();
+    arch.fillStyle(COLORS.outline,1); arch.fillRect(276,116,248,270);
+    arch.fillStyle(COLORS.terracotta,1); arch.fillRect(280,120,240,266);
+    arch.fillStyle(COLORS.outline,1); arch.fillEllipse(400,150,226,94);
+    arch.fillStyle(COLORS.crimson,1); arch.fillEllipse(400,155,214,84);
+    arch.fillStyle(COLORS.dusk,1); arch.fillEllipse(400,168,170,72);
+
+    makeDomeTexture(this,'dome-audience',COLORS.turquoise,COLORS.turquoiseDark);
+    this.add.image(150,90,'dome-audience').setScale(1.6).setOrigin(0.5,0.9);
+    this.add.image(650,90,'dome-audience').setScale(1.6).setOrigin(0.5,0.9);
+
+    makeCharacterTexture(this,'guard-audience-tex',{skin:COLORS.skin1,robe:0x3a2f52,accent:0x6b5a8a,headwear:'helmet',headwearColor:0x4a4058,expression:'neutral'});
+    [270,530].forEach((x)=>{
+      const gd=this.add.image(x,360,'guard-audience-tex').setOrigin(0.5,1);
+      this.tweens.add({ targets:gd, scaleY:1.03, duration:1400+Math.random()*300, yoyo:true, repeat:-1 });
+    });
+
+    makeCharacterTexture(this,'sanobar-throne-tex',{skin:COLORS.skin1,robe:COLORS.crimson,accent:COLORS.gold,headwear:'crown',headwearColor:0x2a1f1a,beard:true,expression:'stern'});
+    this.add.image(400,346,'sanobar-throne-tex').setScale(1.35).setOrigin(0.5,1);
+
+    makeCharacterTexture(this,'player-kitchen-tex', PLAYER_APPEARANCE);
+    this.add.image(400,412,'player-kitchen-tex').setOrigin(0.5,1);
+  }
+  beginAudience(){
+    Dialogue.show([
+      { speaker:'The King', text:"The kitchen boy who's been quietly outcooking my own chef. I've heard about you." },
+      { speaker:'The King', text:"You've earned a question. Ask it plainly." },
+      { speaker:'You', text:"The woman in the iron cage. Who is she?" },
+      { speaker:'The King', text:"...Walk with me. It's easier shown than told." }
+    ], () => this.toHall());
+  }
+  toHall(){
+    this.cameras.main.fadeOut(600,0,0,0);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('SkullHallScene'));
+  }
+}
+
+/* =========================================================================
+   SKULL HALL SCENE — the confession, in the same room the game opened on.
+   ========================================================================= */
+class SkullHallScene extends Phaser.Scene {
+  constructor(){ super('SkullHallScene'); }
+  create(){
+    buildSkullHall(this);
+
+    makeCharacterTexture(this,'sanobar-confess-tex',{skin:COLORS.skin1,robe:COLORS.crimson,accent:COLORS.gold,headwear:'crown',headwearColor:0x2a1f1a,beard:true,expression:'stern'});
+    this.add.image(320,410,'sanobar-confess-tex').setScale(1.4).setOrigin(0.5,1);
+
+    makeCharacterTexture(this,'player-hall-tex', PLAYER_APPEARANCE);
+    this.add.image(480,412,'player-hall-tex').setOrigin(0.5,1);
+
+    this.time.delayedCall(500, () => this.beginConfession());
+  }
+  beginConfession(){
+    Dialogue.show([
+      { speaker:'King Sanobar', text:"You already know about the hooks. Now you'll know why." },
+      { speaker:'King Sanobar', text:"I married her when she was little more than a child. I doted on her for years. I thought that was enough." },
+      { speaker:'King Sanobar', text:"Then I noticed my horses coming in exhausted every morning. No one would admit to riding them." },
+      { speaker:'King Sanobar', text:"The night I finally stayed awake instead of falling asleep like always, I found a charm pressed against my own chest. Someone had been keeping me asleep on purpose." },
+      { speaker:'King Sanobar', text:"I followed the second horse by moonlight. To my own orchard. My own land. A household I never knew existed." },
+      { speaker:'King Sanobar', text:"My steward. Forty attendants the crown paid for. And Gul, standing among them like she belonged there." },
+      { speaker:'King Sanobar', text:"I killed the attendants first, one by one, as he sent them out to check the noise. Then I fought him. Then I killed him." },
+      { speaker:'King Sanobar', text:"The law demanded I execute her too. My own fury demanded it more. I couldn't do it. I caged her instead." },
+      { speaker:'King Sanobar', text:"As I finished him, she screamed something. A plea for his life, maybe. Or an explanation. Twenty years, and neither of us has ever raised it again." },
+      { speaker:'King Sanobar', text:"One thing I've never told anyone. He was carrying a sealed case that night. It was gone before my men could search the body." },
+      { speaker:'King Sanobar', text:"That's the whole of it. Now you understand the hooks." },
+      { speaker:'King Sanobar', text:"...You're the first person I've told all of it. I still don't know why." }
+    ], () => this.toFlashbackTitle());
+  }
+  toFlashbackTitle(){
+    this.cameras.main.fadeOut(700,0,0,0);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.showStub());
+  }
+  showStub(){
+    fillSky(this,800,450,COLORS.ink,COLORS.ink);
+    this.add.text(400,190,'Twenty years earlier...',{fontFamily:'Georgia, serif',fontSize:'28px',fontStyle:'italic',color:'#EFE3C8'}).setOrigin(0.5);
+    this.add.text(400,236,'You are about to become Sanobar.',{fontFamily:'Georgia, serif',fontSize:'16px',color:'#E8A33D'}).setOrigin(0.5);
+    this.add.text(400,280,'\u2014 End of this preview build \u2014',{fontFamily:'Georgia, serif',fontSize:'14px',fontStyle:'italic',color:'#8A7A9A'}).setOrigin(0.5);
+    this.add.text(400,310,'The playable flashback is coming next.',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'13px',color:'#EFE3C8'}).setOrigin(0.5);
+    this.cameras.main.fadeIn(500,0,0,0);
+  }
+}
+
+/* =========================================================================
    CARPET SCENE — the world-map mechanic. Bug fixes baked in from earlier
    passes: backgrounds genuinely scroll (TileSprite tilePositionX advances),
    the carpet's collision body matches its baked texture exactly with no
@@ -1609,14 +1987,94 @@ const AREAS = {
         },
         onComplete:(scene)=>{
           if (GameState.get('bakery-minigame-done')) {
-            GameState.set('saddler-needed', true);
-            scene.endOfSlice('Saddler');
+            flyTo(scene, {
+              nextScene:'OpenAreaScene', nextSceneData:{areaKey:'saddler'},
+              distance:2500, theme:'storm', wind:1.6, gapSize:120, spawnRange:[0.9,1.3]
+            });
           } else {
             scene.cameras.main.fadeOut(400,0,0,0);
             scene.cameras.main.once('camerafadeoutcomplete', () => {
               scene.scene.start('BakeryScene', { nextScene:'OpenAreaScene', nextSceneData:{areaKey:'baker'} });
             });
           }
+        }
+      }
+    ],
+    exits:[]
+  },
+  saddler: {
+    width:1000, height:600,
+    skyTop:0x5a4a5a, groundColor:0x7a6a55,
+    intro:"Leather and horsehide hang from every hook. Someone here spends a year on a single saddle.",
+    playerStart:{x:80,y:500},
+    structures:[
+      { type:'house', x:750,y:480, collide:true, footW:80, footH:26 },
+      { type:'tree', x:250,y:380, collide:true, footW:16, footH:10 },
+      { type:'rock', x:450,y:540, collide:false },
+      { type:'well', x:400,y:420, collide:true, footW:40, footH:20 }
+    ],
+    npcs:[
+      { x:280,y:460, appearance:{skin:COLORS.skin1, robe:0x5a4a3a, accent:COLORS.terracotta, headwear:'cap', headwearColor:0x3a2a1a, expression:'neutral'}, hint:"He's broken more saddles than he's sold, they say." },
+      { x:550,y:400, appearance:{skin:COLORS.skin2, robe:0x4a5a5a, accent:COLORS.gold, headwear:'turban', headwearColor:0x2a3a3a, expression:'neutral'}, hint:"A whole year on one saddle, and then he takes it apart. Why buy from a man like that?" },
+      { x:850,y:400, appearance:{skin:COLORS.skin1, robe:0x6a4a5a, accent:COLORS.saffron, headwear:'cap', headwearColor:0x3a2a3a, expression:'neutral'}, hint:"Best not to interrupt him mid-stitch. He's particular about that." },
+      { x:720,y:540, isTarget:true,
+        appearance:{skin:COLORS.skin2, robe:0x5a4a3a, accent:COLORS.terracotta, headwear:'cap', headwearColor:0x3a2a1a, beard:true, expression:'neutral'},
+        getDialogue(){
+          if (GameState.get('saddle-minigame-done')) {
+            return [
+              { speaker:'Saddler', text:"You've a decent hand for this. Not that it changes anything." },
+              { speaker:'You', text:"A client of yours \u2014 someone who never came back for his order." },
+              { speaker:'Saddler', text:"...Qahraton. Vanished twenty years ago, no word since. I've never known if he was alive, a traitor, or dead in a ditch." },
+              { speaker:'Saddler', text:"Tell me what became of him \u2014 with certainty \u2014 and maybe I'll stop building saddles for a man who'll never collect them." },
+              { speaker:'Saddler', text:"He was last seen riding for the court of a king named Sanobar. Start there." }
+            ];
+          }
+          return [{ speaker:'Saddler', text:"Don't have time for questions. If you want to stand there, make yourself useful \u2014 hand me the pieces, put them where they go." }];
+        },
+        onComplete:(scene)=>{
+          if (GameState.get('saddle-minigame-done')) {
+            flyTo(scene, {
+              nextScene:'OpenAreaScene', nextSceneData:{areaKey:'sanobarCity'},
+              distance:2400, theme:'city', wind:0.5, gapSize:135, spawnRange:[1.1,1.5]
+            });
+          } else {
+            scene.cameras.main.fadeOut(400,0,0,0);
+            scene.cameras.main.once('camerafadeoutcomplete', () => {
+              scene.scene.start('SaddlerScene', { nextScene:'OpenAreaScene', nextSceneData:{areaKey:'saddler'} });
+            });
+          }
+        }
+      }
+    ],
+    exits:[]
+  },
+  sanobarCity: {
+    width:1000, height:600,
+    skyTop:0xC98A6A, groundColor:0xB89A78,
+    intro:"A grander city than any you've seen. Sanobar's palace rises at its heart.",
+    playerStart:{x:80,y:500},
+    structures:[
+      { type:'mosque', x:750,y:460, collide:true, footW:70, footH:26 },
+      { type:'house', x:350,y:500, collide:true, footW:70, footH:24 },
+      { type:'tree', x:200,y:400, collide:true, footW:16, footH:10 },
+      { type:'well', x:500,y:420, collide:true, footW:40, footH:20 }
+    ],
+    npcs:[
+      { x:280,y:460, appearance:{skin:COLORS.skin1, robe:0x5a4a6a, accent:COLORS.turquoise, headwear:'turban', headwearColor:0x3a3a5a, expression:'neutral'}, hint:"They say the King never leaves the palace grounds anymore." },
+      { x:600,y:400, appearance:{skin:COLORS.skin2, robe:0x6a5a4a, accent:COLORS.gold, headwear:'cap', headwearColor:0x3a2a1a, expression:'neutral'}, hint:"Best not linger by the gate. The guards don't care for loiterers." },
+      { x:730,y:540, isTarget:true,
+        appearance:{skin:COLORS.skin1, robe:0x3a2f52, accent:0x6b5a8a, headwear:'helmet', headwearColor:0x4a4058, expression:'neutral'},
+        dialogue:[
+          { speaker:'Guard', text:"...another mouth to feed and the kitchen's short-handed again, as usual." },
+          { speaker:'Guard', text:"You. You look like you can hold a knife without cutting yourself. Can you cook?" },
+          { speaker:'You', text:"Better than most." },
+          { speaker:'Guard', text:"Good enough for me. Inside, then. Don't make me regret it." }
+        ],
+        onComplete:(scene)=>{
+          scene.cameras.main.fadeOut(400,0,0,0);
+          scene.cameras.main.once('camerafadeoutcomplete', () => {
+            scene.scene.start('KitchenScene', { nextScene:'AudienceScene', nextSceneData:{} });
+          });
         }
       }
     ],
@@ -1637,7 +2095,7 @@ window.addEventListener('load', () => {
     backgroundColor: '#1B1330',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default:'arcade', arcade:{ gravity:{y:0}, debug:false } },
-    scene: [TitleScene, IntroScene, MonthsEarlierScene, OpenAreaScene, PalaceScene, CarpetScene, BakeryScene, RiverCutsceneScene]
+    scene: [TitleScene, IntroScene, MonthsEarlierScene, OpenAreaScene, PalaceScene, CarpetScene, BakeryScene, RiverCutsceneScene, SaddlerScene, KitchenScene, AudienceScene, SkullHallScene]
   });
 });
 </script>
