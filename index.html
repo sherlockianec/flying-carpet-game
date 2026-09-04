@@ -71,6 +71,25 @@
   }
   .touch-btn:active { background:rgba(239,227,200,0.32); }
 
+  #combat-controls {
+    position:fixed; bottom:6%; left:0; right:0;
+    display:flex; justify-content:space-between; padding:0 5%;
+    z-index:15;
+  }
+  #combat-controls.hidden { display:none; }
+  #combat-move { display:flex; gap:8px; }
+  #combat-move .touch-btn { width:56px; height:56px; }
+  #combat-actions { display:flex; gap:10px; align-items:flex-end; }
+  .combat-action-btn {
+    touch-action:none;
+    width:72px; height:72px; border-radius:50%;
+    background:rgba(139,38,53,0.4); border:2px solid rgba(239,227,200,0.6);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Trebuchet MS',sans-serif; font-weight:bold; font-size:11px; color:#EFE3C8;
+    user-select:none; -webkit-user-select:none;
+  }
+  .combat-action-btn:active { background:rgba(139,38,53,0.7); }
+
   #hint-banner {
     position:fixed; top:6%; left:50%; transform:translateX(-50%);
     max-width:86vw;
@@ -102,6 +121,17 @@
   <div></div><div id="btn-up" class="touch-btn">&#9650;</div><div></div>
   <div id="btn-left" class="touch-btn">&#9664;</div><div></div><div id="btn-right" class="touch-btn">&#9654;</div>
   <div></div><div id="btn-down" class="touch-btn">&#9660;</div><div></div>
+</div>
+
+<div id="combat-controls" class="hidden">
+  <div id="combat-move">
+    <div id="cbtn-left" class="touch-btn">&#9664;</div>
+    <div id="cbtn-right" class="touch-btn">&#9654;</div>
+  </div>
+  <div id="combat-actions">
+    <div id="cbtn-roll" class="combat-action-btn">ROLL</div>
+    <div id="cbtn-attack" class="combat-action-btn">ATTACK</div>
+  </div>
 </div>
 
 <div id="hint-banner" class="hidden"></div>
@@ -188,6 +218,28 @@ const Touch = {
   },
   show(){ this.el.classList.remove('hidden'); },
   hide(){ this.el.classList.add('hidden'); this.left=this.right=this.up=this.down=false; }
+};
+
+const CombatTouch = {
+  left:false, right:false, attackPressed:false, rollPressed:false, el:null,
+  init(){
+    this.el = document.getElementById('combat-controls');
+    const bindHold = (id, prop) => {
+      const btn = document.getElementById(id);
+      btn.addEventListener('pointerdown', (e) => { e.preventDefault(); this[prop] = true; });
+      btn.addEventListener('pointerup', () => { this[prop] = false; });
+      btn.addEventListener('pointerleave', () => { this[prop] = false; });
+      btn.addEventListener('pointercancel', () => { this[prop] = false; });
+    };
+    const bindTap = (id, prop) => {
+      const btn = document.getElementById(id);
+      btn.addEventListener('pointerdown', (e) => { e.preventDefault(); this[prop] = true; });
+    };
+    bindHold('cbtn-left','left'); bindHold('cbtn-right','right');
+    bindTap('cbtn-attack','attackPressed'); bindTap('cbtn-roll','rollPressed');
+  },
+  show(){ this.el.classList.remove('hidden'); },
+  hide(){ this.el.classList.add('hidden'); this.left=this.right=false; this.attackPressed=this.rollPressed=false; }
 };
 
 function showHint(text, duration) {
@@ -516,6 +568,27 @@ function shuffleArray(arr) {
   return arr;
 }
 
+function makeSwordTexture(scene, key) {
+  const W=10, H=44;
+  return ensureTexture(scene, key, W, H, (g) => {
+    g.fillStyle(COLORS.outline,1); g.fillRect(W/2-3,2,6,H-10);
+    g.fillStyle(0xB8C4C8,1); g.fillRect(W/2-2,4,4,H-16);
+    g.fillStyle(0x6a4a35,1); g.fillRect(W/2-3,H-12,6,10);
+    g.fillStyle(COLORS.gold,1); g.fillRect(0,H-16,W,3);
+  });
+}
+
+function spawnSlashArc(scene, x, y, facing) {
+  const arc = scene.add.graphics();
+  arc.lineStyle(4, 0xEFE3C8, 0.9);
+  const startAngle = facing>0 ? -55 : 235;
+  const endAngle = facing>0 ? 55 : 125;
+  arc.beginPath();
+  arc.arc(x, y, 40, Phaser.Math.DegToRad(startAngle), Phaser.Math.DegToRad(endAngle), false);
+  arc.strokePath();
+  scene.tweens.add({ targets:arc, alpha:0, duration:180, onComplete:()=>arc.destroy() });
+}
+
 function makeSaddlePieceTexture(scene, key, type) {
   let W,H;
   if (type==='seat') { W=100; H=54; }
@@ -731,7 +804,7 @@ class TitleScene extends Phaser.Scene {
     this.input.once('pointerdown', () => this.begin());
     this.input.keyboard.once('keydown-SPACE', () => this.begin());
   }
-  begin(){ Dialogue.init(); Touch.init(); this.scene.start('IntroScene'); }
+  begin(){ Dialogue.init(); Touch.init(); CombatTouch.init(); this.scene.start('IntroScene'); }
 }
 
 /* =========================================================================
@@ -1042,10 +1115,7 @@ class PalaceScene extends Phaser.Scene {
     const carpet=this.add.image(400,412,'carpet-small').setScale(1.6).setAlpha(0);
     this.tweens.add({ targets:carpet, alpha:1, y:392, duration:500 });
     Dialogue.show([{ speaker:'Minister', text:"Say the words. Go." }], () => {
-      this.cameras.main.fadeOut(500,0,0,0);
-      this.cameras.main.once('camerafadeoutcomplete', () => {
-        this.scene.start('CarpetScene', { nextScene:'OpenAreaScene', nextSceneData:{areaKey:'ovenCouple'}, distance:2400 });
-      });
+      flyToLevel(this, 'flight1', 'OpenAreaScene', {areaKey:'ovenCouple'});
     });
   }
 }
@@ -1595,14 +1665,329 @@ class SkullHallScene extends Phaser.Scene {
   }
   toFlashbackTitle(){
     this.cameras.main.fadeOut(700,0,0,0);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.showStub());
+    this.cameras.main.once('camerafadeoutcomplete', () => this.showTitleCard());
   }
-  showStub(){
+  showTitleCard(){
     fillSky(this,800,450,COLORS.ink,COLORS.ink);
-    this.add.text(400,190,'Twenty years earlier...',{fontFamily:'Georgia, serif',fontSize:'28px',fontStyle:'italic',color:'#EFE3C8'}).setOrigin(0.5);
-    this.add.text(400,236,'You are about to become Sanobar.',{fontFamily:'Georgia, serif',fontSize:'16px',color:'#E8A33D'}).setOrigin(0.5);
-    this.add.text(400,280,'\u2014 End of this preview build \u2014',{fontFamily:'Georgia, serif',fontSize:'14px',fontStyle:'italic',color:'#8A7A9A'}).setOrigin(0.5);
-    this.add.text(400,310,'The playable flashback is coming next.',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'13px',color:'#EFE3C8'}).setOrigin(0.5);
+    const t1=this.add.text(400,205,'Twenty years earlier...',{fontFamily:'Georgia, serif',fontSize:'28px',fontStyle:'italic',color:'#EFE3C8'}).setOrigin(0.5).setAlpha(0);
+    const t2=this.add.text(400,250,'You are Sanobar now.',{fontFamily:'Georgia, serif',fontSize:'17px',color:'#E8A33D'}).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({ targets:[t1,t2], alpha:1, duration:900, yoyo:true, hold:900, onComplete:() => this.scene.start('FlashbackScene') });
+  }
+}
+
+/* =========================================================================
+   FLASHBACK SCENE — you play as Sanobar. Deliberately built with zero
+   Arcade Physics bodies: movement, hits, and dodges are all plain position
+   math (checked by distance, not by physics overlap), because every real
+   bug so far in this project came from physics-body/group interactions.
+   This is the one system in the game that couldn't reuse a proven pattern,
+   so it gets the most conservative implementation choices available.
+   ========================================================================= */
+class FlashbackScene extends Phaser.Scene {
+  constructor(){ super('FlashbackScene'); }
+  create(){
+    this.groundY = 360;
+    this.worldMinX = 60;
+    this.worldMaxX = 740;
+    this.done = false;
+    this.phase = 'wave1';
+
+    this.player = {
+      x:120, facing:1, vx:0, hp:5, maxHp:5,
+      state:'idle', stateTimer:0, invincible:false, invTimer:0
+    };
+
+    this.buildBackground();
+    this.buildPlayer();
+    this.buildGuards();
+    this.buildHud();
+    this.spawnWave1();
+
+    CombatTouch.show();
+    this.attackKey = this.input.keyboard.addKey('SPACE');
+    this.rollKey = this.input.keyboard.addKey('SHIFT');
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.wasd = this.input.keyboard.addKeys('A,D');
+
+    this.time.delayedCall(300, () => {
+      Dialogue.show([{ speaker:'', text:"Twenty years ago. The orchard. A/D or arrows to move, Space to attack, Shift to roll \u2014 or use the buttons." }]);
+    });
+  }
+  buildBackground(){
+    fillSky(this,800,450,0x1a1830,0x0a0814);
+    const moon=this.add.graphics(); moon.fillStyle(0xEFE3C8,0.85); moon.fillCircle(680,70,28);
+    const ground=this.add.graphics(); ground.fillStyle(0x2a3a2a,1); ground.fillRect(0,360,800,90);
+    makeTreeTexture(this,'orchard-tree-tex');
+    [60,220,400,580,740].forEach((x)=>{
+      this.add.image(x,this.groundY,'orchard-tree-tex').setOrigin(0.5,1).setScale(1.3).setTint(0x1a2a1a).setAlpha(0.7);
+    });
+  }
+  buildPlayer(){
+    makeCharacterTexture(this,'sanobar-combat-tex', {skin:COLORS.skin1, robe:0x4a3a5a, accent:COLORS.gold, headwear:'helmet', headwearColor:0x3a3a4a, expression:'stern'});
+    this.playerImg = this.add.image(this.player.x, this.groundY, 'sanobar-combat-tex').setOrigin(0.5,1).setScale(1.1);
+    makeSwordTexture(this,'sword-tex');
+    this.swordImg = this.add.image(this.player.x, this.groundY-28, 'sword-tex').setOrigin(0.5,0.85);
+  }
+  buildGuards(){
+    makeCharacterTexture(this,'guard-flashback-tex', {skin:COLORS.skin1, robe:0x3a2f52, accent:0x6b5a8a, headwear:'helmet', headwearColor:0x4a4058, expression:'neutral'});
+    this.guards = [
+      { img:this.add.image(this.player.x-40,this.groundY,'guard-flashback-tex').setOrigin(0.5,1).setScale(0.95), offset:-40 },
+      { img:this.add.image(this.player.x-70,this.groundY,'guard-flashback-tex').setOrigin(0.5,1).setScale(0.95), offset:-70 }
+    ];
+  }
+  buildHud(){
+    this.hpPips = [];
+    for (let i=0;i<this.player.maxHp;i++){
+      const pip=this.add.circle(30+i*22,30,8,COLORS.crimson,1).setStrokeStyle(2,COLORS.outline,1);
+      this.hpPips.push(pip);
+    }
+  }
+  makeAttendant(x){
+    makeCharacterTexture(this,'attendant-tex', {skin:COLORS.skin2, robe:0x4a3a3a, accent:0x6a5a4a, headwear:'cap', headwearColor:0x3a2a2a, expression:'stern'});
+    const e = {
+      x, facing:-1, hp:2, maxHp:2, state:'idle', stateTimer:0,
+      decisionTimer:Phaser.Math.FloatBetween(0.6,1.2), hitFlashTimer:0,
+      engageRange:110, attackRange:55, windupTime:0.5, activeTime:0.15,
+      isBoss:false
+    };
+    e.img = this.add.image(x,this.groundY,'attendant-tex').setOrigin(0.5,1);
+    return e;
+  }
+  spawnWave1(){
+    this.phase='wave1';
+    this.enemies = [ this.makeAttendant(420), this.makeAttendant(500) ];
+    showHint("Two attendants block the way.");
+  }
+  spawnWave2(){
+    this.phase='wave2';
+    this.enemies = [ this.makeAttendant(480), this.makeAttendant(560) ];
+    showHint("More of them, further in.");
+  }
+  beginBoss(){
+    this.phase='boss';
+    showHint("The guards fall back. This one is yours.");
+    makeCharacterTexture(this,'qahraton-tex', {skin:COLORS.skin1, robe:0x2a4a4a, accent:COLORS.gold, headwear:'turban', headwearColor:0x1a3a3a, beard:true, expression:'stern'});
+    const q = {
+      x:600, facing:-1, hp:6, maxHp:6, state:'idle', stateTimer:0,
+      decisionTimer:1.0, hitFlashTimer:0,
+      engageRange:170, attackRange:75, windupTime:0.55, activeTime:0.18,
+      isBoss:true
+    };
+    q.img=this.add.image(600,this.groundY,'qahraton-tex').setOrigin(0.5,1).setScale(1.15);
+    this.enemies=[q];
+    this.buildBossHealthBar();
+  }
+  buildBossHealthBar(){
+    const barX=250, barY=70, barW=300, barH=18;
+    this.bossBarMaxW=barW-4;
+    this.add.rectangle(barX,barY,barW,barH,0x000000,0.5).setOrigin(0,0.5).setStrokeStyle(2,COLORS.outline,0.8);
+    this.bossBarFill=this.add.rectangle(barX+2,barY,barW-4,barH-4,0xB3452E,1).setOrigin(0,0.5);
+    this.add.text(barX+barW/2,barY-22,'QAHRATON',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'13px',fontStyle:'bold',color:'#EFE3C8'}).setOrigin(0.5);
+  }
+  updateBossBar(e){
+    if (!this.bossBarFill) return;
+    this.bossBarFill.setScale(Math.max(e.hp,0)/e.maxHp, 1);
+  }
+  update(time, delta){
+    if (this.done) return;
+    if (Dialogue.active) return;
+    const dt = delta/1000;
+    this.handleInput(dt);
+    this.updatePlayer(time, dt);
+    this.updateEnemies(time, dt);
+    this.updateGuards(time, dt);
+    this.updateHud();
+    this.checkPhaseProgress();
+  }
+  handleInput(dt){
+    const p=this.player;
+    if (p.state==='dead') return;
+    if (p.state==='idle' || p.state==='walking'){
+      let vx=0;
+      const left=this.cursors.left.isDown || this.wasd.A.isDown || CombatTouch.left;
+      const right=this.cursors.right.isDown || this.wasd.D.isDown || CombatTouch.right;
+      if (left){ vx=-160; p.facing=-1; }
+      else if (right){ vx=160; p.facing=1; }
+      p.vx=vx;
+      p.state = vx!==0 ? 'walking' : 'idle';
+
+      if (Phaser.Input.Keyboard.JustDown(this.attackKey) || CombatTouch.attackPressed) this.startAttack();
+      else if (Phaser.Input.Keyboard.JustDown(this.rollKey) || CombatTouch.rollPressed) this.startRoll();
+    } else {
+      p.vx=0;
+    }
+    CombatTouch.attackPressed=false;
+    CombatTouch.rollPressed=false;
+  }
+  startAttack(){
+    const p=this.player;
+    if (p.state!=='idle' && p.state!=='walking') return;
+    p.state='attacking'; p.stateTimer=0.4; p.vx=0;
+    this.tweens.add({ targets:this.playerImg, x:this.playerImg.x+p.facing*14, duration:120, yoyo:true });
+    this.time.delayedCall(120, () => { if (p.state==='attacking') this.performAttackHit(); });
+  }
+  performAttackHit(){
+    const p=this.player;
+    spawnSlashArc(this, this.playerImg.x+p.facing*30, this.groundY-40, p.facing);
+    const range=60;
+    this.enemies.forEach((e) => {
+      if (e.state==='dead') return;
+      const dx=e.x-p.x;
+      const facingMatches=(p.facing>0 && dx>=0) || (p.facing<0 && dx<=0);
+      if (Math.abs(dx)<=range && facingMatches) this.damageEnemy(e,1);
+    });
+  }
+  startRoll(){
+    const p=this.player;
+    if (p.state!=='idle' && p.state!=='walking') return;
+    p.state='rolling'; p.stateTimer=0.3; p.rollVX=p.facing*420; p.invincible=true;
+  }
+  updatePlayer(time, dt){
+    const p=this.player;
+    if (p.state==='dead') return;
+
+    if (p.state==='attacking' || p.state==='hit'){
+      p.stateTimer-=dt; if (p.stateTimer<=0) p.state='idle';
+    }
+    if (p.state==='rolling'){
+      p.stateTimer-=dt; p.x+=p.rollVX*dt;
+      if (p.stateTimer<=0){ p.state='idle'; p.invincible=false; }
+    } else {
+      p.x += p.vx*dt;
+    }
+    p.x = Phaser.Math.Clamp(p.x, this.worldMinX, this.worldMaxX);
+
+    if (p.invTimer>0){ p.invTimer-=dt; if (p.invTimer<=0 && p.state!=='rolling') p.invincible=false; }
+
+    this.playerImg.x = p.x;
+    this.playerImg.setFlipX(p.facing<0);
+    this.playerImg.setAlpha(p.invincible ? (Math.sin(time/60)>0?1:0.4) : 1);
+
+    this.swordImg.x = this.playerImg.x + p.facing*10;
+    this.swordImg.y = this.groundY-28;
+    this.swordImg.setFlipX(p.facing<0);
+    this.swordImg.setAngle(p.state==='attacking' ? (p.facing>0?40:-40) : (p.facing>0?-20:20));
+    this.swordImg.setAlpha(this.playerImg.alpha);
+  }
+  updateEnemies(time, dt){
+    const p=this.player;
+    this.enemies.forEach((e) => {
+      if (e.state==='dead') return;
+      if (e.hitFlashTimer>0) e.hitFlashTimer-=dt;
+
+      if (e.state==='idle'){
+        const dist=Math.abs(p.x-e.x);
+        if (dist<e.engageRange){
+          e.decisionTimer-=dt;
+          if (e.decisionTimer<=0){
+            e.state='windup';
+            e.facing=(p.x<e.x)?-1:1;
+            if (e.isBoss){
+              e.attackPattern = Math.random()<0.5 ? 'lunge':'sweep';
+              e.stateTimer = e.attackPattern==='lunge' ? 0.5 : 0.7;
+              e.pendingRange = e.attackPattern==='lunge' ? 75 : 100;
+            } else {
+              e.stateTimer=e.windupTime;
+              e.pendingRange=e.attackRange;
+            }
+          }
+        } else {
+          e.decisionTimer = Phaser.Math.FloatBetween(0.8,1.6);
+        }
+      } else if (e.state==='windup'){
+        e.stateTimer-=dt;
+        if (e.stateTimer<=0){
+          e.state='attacking'; e.stateTimer=e.activeTime;
+          this.tryEnemyHitPlayer(e, e.pendingRange||e.attackRange);
+        }
+      } else if (e.state==='attacking'){
+        e.stateTimer-=dt;
+        if (e.stateTimer<=0){ e.state='idle'; e.decisionTimer=Phaser.Math.FloatBetween(1.2,2.2); }
+      }
+
+      e.img.x=e.x;
+      e.img.setFlipX(e.facing<0);
+      const flashOn = e.hitFlashTimer>0 && Math.floor(time/60)%2===0;
+      e.img.setTint(e.state==='windup' ? 0xffaaaa : (flashOn ? 0xff5555 : 0xffffff));
+
+      if (e.isBoss) this.updateBossBar(e);
+    });
+  }
+  updateGuards(time, dt){
+    this.guards.forEach((g) => {
+      const targetX = Phaser.Math.Clamp(this.player.x + g.offset*this.player.facing, this.worldMinX, this.worldMaxX);
+      g.img.x += (targetX-g.img.x) * Math.min(dt*3,1);
+      g.img.setFlipX(this.player.facing<0);
+    });
+  }
+  updateHud(){
+    this.hpPips.forEach((pip,i) => { pip.setFillStyle(i<this.player.hp ? COLORS.crimson : 0x333333); });
+  }
+  tryEnemyHitPlayer(e, range){
+    const p=this.player;
+    if (p.invincible) return;
+    const dist=Math.abs(p.x-e.x);
+    if (dist<=range) this.damagePlayer(1);
+  }
+  damageEnemy(e, amount){
+    if (e.state==='dead') return;
+    e.hp-=amount;
+    e.hitFlashTimer=0.25;
+    this.tweens.add({ targets:e.img, x:e.img.x+this.player.facing*8, duration:70, yoyo:true });
+    if (e.hp<=0){
+      e.state='dead';
+      this.tweens.add({ targets:e.img, alpha:0, scaleY:0.6, y:e.img.y+10, duration:300 });
+      if (e.isBoss) this.onBossDefeated();
+    }
+  }
+  damagePlayer(amount){
+    const p=this.player;
+    if (p.invincible || p.state==='dead') return;
+    p.hp-=amount;
+    p.state='hit'; p.stateTimer=0.35;
+    p.invincible=true; p.invTimer=0.6;
+    this.cameras.main.shake(120,0.006);
+    if (p.hp<=0){ p.state='dead'; this.onPlayerDefeated(); }
+  }
+  checkPhaseProgress(){
+    if (this.phase==='wave1' && this.enemies.length>0 && this.enemies.every((e)=>e.state==='dead')){
+      this.phase='transition1';
+      this.time.delayedCall(500, () => this.spawnWave2());
+    } else if (this.phase==='wave2' && this.enemies.length>0 && this.enemies.every((e)=>e.state==='dead')){
+      this.phase='transition2';
+      this.time.delayedCall(600, () => this.beginBoss());
+    }
+  }
+  onPlayerDefeated(){
+    this.done=true;
+    this.add.rectangle(400,225,800,450,0x000000,0.55).setDepth(200);
+    this.add.text(400,205,'Sanobar staggers\u2014',{fontFamily:'Georgia, serif',fontSize:'21px',color:'#EFE3C8'}).setOrigin(0.5).setDepth(201);
+    this.add.text(400,240,'Tap, click, or press Space to try again',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'14px',color:'#E8A33D'}).setOrigin(0.5).setDepth(201);
+    this.time.delayedCall(400, () => {
+      this.input.once('pointerdown', () => this.scene.restart());
+      this.input.keyboard.once('keydown-SPACE', () => this.scene.restart());
+    });
+  }
+  onBossDefeated(){
+    this.phase='victory';
+    this.done=true;
+    CombatTouch.hide();
+    this.time.delayedCall(500, () => {
+      Dialogue.show([
+        { speaker:'', text:"Qahraton falls. The orchard goes quiet." },
+        { speaker:'', text:"Sanobar stands over him a long moment before he ever moves toward the house." }
+      ], () => this.toAftermath());
+    });
+  }
+  toAftermath(){
+    this.cameras.main.fadeOut(700,0,0,0);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.showAftermathStub());
+  }
+  showAftermathStub(){
+    fillSky(this,800,450,COLORS.ink,COLORS.ink);
+    this.add.text(400,190,'The flashback ends here.',{fontFamily:'Georgia, serif',fontSize:'26px',fontStyle:'italic',color:'#EFE3C8'}).setOrigin(0.5);
+    this.add.text(400,230,'\u2014 End of this preview build \u2014',{fontFamily:'Georgia, serif',fontSize:'14px',fontStyle:'italic',color:'#8A7A9A'}).setOrigin(0.5);
+    this.add.text(400,262,'Next: back to the protagonist, and the reverse journey.',{fontFamily:'Trebuchet MS, sans-serif',fontSize:'13px',color:'#EFE3C8'}).setOrigin(0.5);
     this.cameras.main.fadeIn(500,0,0,0);
   }
 }
@@ -1618,21 +2003,25 @@ class CarpetScene extends Phaser.Scene {
   constructor(){ super('CarpetScene'); }
   init(data){
     this.initData = data;
+    this.levelKey = data.levelKey || 'flight1';
+    this.level = CARPET_LEVELS[this.levelKey] || CARPET_LEVELS.flight1;
     this.nextScene = data.nextScene || 'OpenAreaScene';
     this.nextSceneData = data.nextSceneData || {};
-    this.targetDistance = data.distance || 2400;
-    this.theme = data.theme || 'city';
-    this.wind = data.wind || 0;
-    this.gapSize = data.gapSize || 150;
-    this.spawnRange = data.spawnRange || [1.3,1.8];
+    this.targetDistance = this.level.distance;
+    this.theme = this.level.theme;
+    this.wind = this.level.wind;
   }
   create(){
-    this.distance=0; this.ended=false; this.started=false; this.spawnTimer=1.0;
+    this.distance=0; this.ended=false; this.started=false;
     this.windTimer = Phaser.Math.FloatBetween(1.5,3);
+    this.finishGateSpawned = false;
     Touch.hide();
     this.physics.world.setBounds(0,0,800,450);
 
     this.buildBackground();
+
+    this.obstacleList = generateLevelObstacles(this.level.seed, this.targetDistance, this.level);
+    this.nextObstacleIndex = 0;
 
     makeCarpetTexture(this,'carpet-fly',64,20);
     this.carpet=this.physics.add.sprite(180,225,'carpet-fly');
@@ -1721,14 +2110,28 @@ class CarpetScene extends Phaser.Scene {
     if (this.carpet.body.velocity.y > 340) this.carpet.body.velocity.y = 340;
     this.carpet.angle += Math.sin(time/260) * 0.4;
 
+    /* Success is checked BEFORE the crash check. Reaching the finish always
+       wins over an unlucky border position in the same frame -- the danger
+       genuinely stops the instant the level is beaten, not one frame later. */
+    if (this.distance >= this.targetDistance) { this.succeed(); return; }
     if (this.carpet.y <= 42 || this.carpet.y >= 408) { this.crash(); return; }
+
+    if (!this.finishGateSpawned && this.distance >= this.targetDistance-150) {
+      this.spawnFinishGate();
+      this.finishGateSpawned = true;
+    }
+    if (this.finishGate) this.finishGate.x -= 190*dt;
 
     this.obstacles.getChildren().slice().forEach((o) => { if (o.x < -80) o.destroy(); });
 
-    this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0) { this.spawnObstacle(); this.spawnTimer = Phaser.Math.FloatBetween(this.spawnRange[0], this.spawnRange[1]); }
-
-    if (this.distance >= this.targetDistance) this.succeed();
+    while (this.nextObstacleIndex < this.obstacleList.length && this.distance >= this.obstacleList[this.nextObstacleIndex].distance) {
+      this.spawnObstacleAt(this.obstacleList[this.nextObstacleIndex]);
+      this.nextObstacleIndex++;
+    }
+  }
+  spawnFinishGate(){
+    makeGateTexture(this,'finish-gate-tex');
+    this.finishGate = this.add.image(830,225,'finish-gate-tex').setScale(2.3).setDepth(5);
   }
   updateTassels(time){
     this.tasselL.x=this.carpet.x-32; this.tasselL.y=this.carpet.y+2;
@@ -1748,8 +2151,8 @@ class CarpetScene extends Phaser.Scene {
     this.carpet.setAngle(-14);
     this.time.delayedCall(220, () => { if (!this.ended) this.carpet.setAngle(6); });
   }
-  spawnObstacle(){
-    const gapY=Phaser.Math.Between(100,310), gapSize=this.gapSize;
+  spawnObstacleAt(entry){
+    const gapY=entry.gapY, gapSize=entry.gapSize;
     const topH=Math.max(gapY-gapSize/2,10), botH=Math.max(450-(gapY+gapSize/2),10);
     const top=this.add.rectangle(830,0,48,topH,COLORS.terracotta).setOrigin(0,0).setStrokeStyle(3,COLORS.outline,0.85);
     const bot=this.add.rectangle(830,gapY+gapSize/2,48,botH,COLORS.terracotta).setOrigin(0,0).setStrokeStyle(3,COLORS.outline,0.85);
@@ -1777,6 +2180,10 @@ class CarpetScene extends Phaser.Scene {
   succeed(){
     if (this.ended) return;
     this.ended=true;
+    for (let i=0;i<10;i++){
+      const ang=(i/10)*Math.PI*2;
+      spawnParticle(this, this.carpet.x, this.carpet.y, { color:COLORS.gold, size:3, dx:Math.cos(ang)*40, dy:Math.sin(ang)*40, duration:500 });
+    }
     this.cameras.main.fadeOut(500,0,0,0);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(this.nextScene, this.nextSceneData));
   }
@@ -1789,9 +2196,51 @@ const CARPET_THEMES = {
   night:   { skyTop:0x14102a, skyBottom:0x05040a, silCol:0x0a0814, groundCol:0x3a3a4a, cloudCol:0x2a2840, cloudAlpha:0.35, useCity:false, stars:true },
   storm:   { skyTop:0x4a4a5a, skyBottom:0x1a1a24, silCol:0x14121c, groundCol:0x5a5560, cloudCol:0x6a6a78, cloudAlpha:0.75, useCity:false, storm:true }
 };
-function flyTo(scene, config) {
+
+/* Simple seeded PRNG (not Math.random, which can't be seeded): the same
+   seed always produces the same sequence, which is what lets each level's
+   obstacle course be generated algorithmically while still being 100%
+   fixed and identical on every playthrough and every retry. */
+function makeSeededRandom(seed) {
+  let s = seed;
+  return function() {
+    s = (s*9301+49297) % 233280;
+    return s/233280;
+  };
+}
+
+/* Builds one level's obstacle list up front. Deterministic: same seed,
+   same targetDistance, same opts -> same exact obstacles every time. Stops
+   200 units before the end so the finish gate always has clear air. */
+function generateLevelObstacles(seed, targetDistance, opts) {
+  const rng = makeSeededRandom(seed);
+  const obstacles = [];
+  let d = opts.startDistance || 320;
+  const maxD = targetDistance - 200;
+  while (d < maxD) {
+    const gapY = opts.gapYMin + rng()*(opts.gapYMax-opts.gapYMin);
+    obstacles.push({ distance:Math.round(d), gapY:Math.round(gapY), gapSize:opts.gapSize });
+    d += opts.spacing + (rng()-0.5)*2*opts.spacingVariance;
+  }
+  return obstacles;
+}
+
+/* One table, one place to review the whole difficulty curve. Distance
+   strictly increases every level; gaps get tighter and obstacles get
+   closer together as the levels progress. */
+const CARPET_LEVELS = {
+  flight1: { theme:'city',    distance:2400, wind:0,   gapSize:150, spacing:300, spacingVariance:40, gapYMin:100, gapYMax:310, seed:101 },
+  flight2: { theme:'village', distance:3000, wind:1,   gapSize:135, spacing:260, spacingVariance:35, gapYMin:100, gapYMax:310, seed:202 },
+  flight3: { theme:'night',   distance:3600, wind:0,   gapSize:125, spacing:240, spacingVariance:30, gapYMin:90,  gapYMax:320, seed:303 },
+  flight4: { theme:'storm',   distance:4200, wind:1.6, gapSize:112, spacing:220, spacingVariance:28, gapYMin:90,  gapYMax:320, seed:404 },
+  flight5: { theme:'city',    distance:4800, wind:0.5, gapSize:115, spacing:225, spacingVariance:28, gapYMin:90,  gapYMax:320, seed:505 }
+};
+
+function flyToLevel(scene, levelKey, nextScene, nextSceneData) {
   scene.cameras.main.fadeOut(400,0,0,0);
-  scene.cameras.main.once('camerafadeoutcomplete', () => { scene.scene.start('CarpetScene', config); });
+  scene.cameras.main.once('camerafadeoutcomplete', () => {
+    scene.scene.start('CarpetScene', { levelKey, nextScene, nextSceneData });
+  });
 }
 
 /* =========================================================================
@@ -1891,10 +2340,7 @@ const AREAS = {
         ],
         flag:'gravekeeper-needed',
         onComplete:(scene)=>{
-          flyTo(scene, {
-            nextScene:'OpenAreaScene', nextSceneData:{areaKey:'gravekeeper'},
-            distance:2200, theme:'village', wind:1, gapSize:130, spawnRange:[1.0,1.4]
-          });
+          flyToLevel(scene, 'flight2', 'OpenAreaScene', {areaKey:'gravekeeper'});
         }
       }
     ],
@@ -1945,10 +2391,7 @@ const AREAS = {
         ],
         flag:'baker-needed',
         onComplete:(scene)=>{
-          flyTo(scene, {
-            nextScene:'OpenAreaScene', nextSceneData:{areaKey:'baker'},
-            distance:2300, theme:'night', wind:0, gapSize:140, spawnRange:[1.2,1.6]
-          });
+          flyToLevel(scene, 'flight3', 'OpenAreaScene', {areaKey:'baker'});
         }
       }
     ],
@@ -1987,10 +2430,7 @@ const AREAS = {
         },
         onComplete:(scene)=>{
           if (GameState.get('bakery-minigame-done')) {
-            flyTo(scene, {
-              nextScene:'OpenAreaScene', nextSceneData:{areaKey:'saddler'},
-              distance:2500, theme:'storm', wind:1.6, gapSize:120, spawnRange:[0.9,1.3]
-            });
+            flyToLevel(scene, 'flight4', 'OpenAreaScene', {areaKey:'saddler'});
           } else {
             scene.cameras.main.fadeOut(400,0,0,0);
             scene.cameras.main.once('camerafadeoutcomplete', () => {
@@ -2033,10 +2473,7 @@ const AREAS = {
         },
         onComplete:(scene)=>{
           if (GameState.get('saddle-minigame-done')) {
-            flyTo(scene, {
-              nextScene:'OpenAreaScene', nextSceneData:{areaKey:'sanobarCity'},
-              distance:2400, theme:'city', wind:0.5, gapSize:135, spawnRange:[1.1,1.5]
-            });
+            flyToLevel(scene, 'flight5', 'OpenAreaScene', {areaKey:'sanobarCity'});
           } else {
             scene.cameras.main.fadeOut(400,0,0,0);
             scene.cameras.main.once('camerafadeoutcomplete', () => {
@@ -2095,7 +2532,7 @@ window.addEventListener('load', () => {
     backgroundColor: '#1B1330',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default:'arcade', arcade:{ gravity:{y:0}, debug:false } },
-    scene: [TitleScene, IntroScene, MonthsEarlierScene, OpenAreaScene, PalaceScene, CarpetScene, BakeryScene, RiverCutsceneScene, SaddlerScene, KitchenScene, AudienceScene, SkullHallScene]
+    scene: [TitleScene, IntroScene, MonthsEarlierScene, OpenAreaScene, PalaceScene, CarpetScene, BakeryScene, RiverCutsceneScene, SaddlerScene, KitchenScene, AudienceScene, SkullHallScene, FlashbackScene]
   });
 });
 </script>
